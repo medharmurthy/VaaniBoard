@@ -17,7 +17,7 @@ export const MathGraphTool: React.FC<MathGraphProps> = ({ config }) => {
   const [b, setB] = useState(config?.b !== undefined ? config.b : -2);
   const [c, setC] = useState(config?.c !== undefined ? config.c : -3);
 
-  const title = config?.title || 'Grafik Matematika Interaktif';
+  const title = config?.title || 'Interactive math graph';
 
   // SVG coordinate transform: domain [-8, 8], range [-8, 8]
   const svgWidth = 360;
@@ -144,7 +144,7 @@ export const MathGraphTool: React.FC<MathGraphProps> = ({ config }) => {
             <g transform={`translate(${toSvgX(keyPoints.vertex.x)}, ${toSvgY(keyPoints.vertex.y)})`}>
               <circle r="4" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
               <text x="6" y="-6" fill="#f59e0b" fontSize="9" fontWeight="bold">
-                Puncak ({keyPoints.vertex.x.toFixed(1)}, {keyPoints.vertex.y.toFixed(1)})
+                Vertex ({keyPoints.vertex.x.toFixed(1)}, {keyPoints.vertex.y.toFixed(1)})
               </text>
             </g>
           )}

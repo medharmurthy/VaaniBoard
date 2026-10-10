@@ -1,3 +1,4 @@
+@import url('/fonts/indic.css');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
@@ -248,3 +249,23 @@
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+.vaani-high-contrast { background: #000 !important; color: #fff !important; }
+.vaani-high-contrast section, .vaani-high-contrast aside, .vaani-high-contrast article { background:#000!important;color:#fff!important;border-color:#ffeb3b!important; }
+.vaani-high-contrast button, .vaani-high-contrast select { border:2px solid #ffeb3b!important; color:#fff!important;background:#111!important; }
+.vaani-nipun p, .vaani-nipun li { font-size:28px;line-height:1.6; }
+.lesson-document .katex-display, .chat-markdown .katex-display { overflow-x:auto; overflow-y:hidden; padding:1rem .25rem; margin:1rem 0; }
+.lesson-document .katex-display { border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc; }
+.lesson-document .prose { max-width:none; font-size:16px; }
+.lesson-document .katex { font-size:1.12em; }
+.vaani-app button:focus-visible, .vaani-app select:focus-visible, .vaani-app textarea:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
+.board-widget .prose h1 { font-size:1.55rem; }
+.classroom-panel button:disabled { cursor:not-allowed; }
+@media(max-width:640px) {
+  .app-brand { padding-left:8px; padding-right:8px; }
+  .app-brand > * { zoom:.85; }
+  .classroom-panel { max-height:calc(100dvh - 100px); }
+  .classroom-panel #classroom-panel-content > .custom-scrollbar { max-height:calc(100dvh - 305px); }
+  .voice-control-dock { width:100%; }
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:0.01ms!important; transition-duration:0.01ms!important;scroll-behavior:auto!important; } }

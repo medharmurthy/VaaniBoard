@@ -5,10 +5,15 @@
 <!-- Cursor, Copilot). Deleting this causes severe agent performance loss. -->
 <!-- ===================================================================== -->
 
-# Trido AI Architecture & Agent Runbook (DO NOT DELETE)
+# Vaani Board / Trido AI Architecture & Agent Runbook (DO NOT DELETE)
 
 ## Core Architecture Map
-- Constants & Defaults: `constants.ts` (Gemini: `gemini-3.8-flash`, Ollama: `gemma4:e2b`, Vertex: `gemini-3.8-flash` in `gemma4good-494311`)
+- Constants & Defaults: `constants.ts`; provider model IDs are configurable via server environment. Vertex must use the deployer's project.
+- Classroom agent: `server/cline/clineAdapter.ts` (`@cline/sdk`, custom tools only), `server/cline/classroomTools.ts`, provider routing and explicit deterministic local classroom commands.
+- Curriculum: `server/rag/index.ts`, `scripts/ingest_syllabus.ts`; Class 9 NCERT PDFs and derived full index under gitignored `data/`.
+- Indic voice: `server/voiceRouter.ts`, `utils/languages.ts`, `utils/reflexGrammar.ts`, `services/speechService.ts`.
+- Classroom UI: `components/ClassroomPanel.tsx`, `components/fln/*`; teacher proposals are private until approval.
+- Undo: `utils/boardHistory.ts` snapshots both Fabric and DOM content; `useAgentProcessor` wraps one request into one history transaction.
 - Global State: `store.ts` (Zustand: active tools, pages, session history, chat messages, whiteboard canvas state)
 - AI Adapters & Routing:
   - Vertex AI: `server/vertexAdapter.ts`

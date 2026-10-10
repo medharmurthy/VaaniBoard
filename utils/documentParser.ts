@@ -257,14 +257,14 @@ export async function parsePdfDocument(buffer: Uint8Array, dataUrl: string, file
 
   // If text stream yielded nothing (e.g. scanned PDF), provide structured note
   if (!fullText) {
-    fullText = `[Dokumen PDF: "${fileName}", ${pageCount} halaman. Konten visual lengkap akan dianalisis secara multimodal oleh Gemini/Vertex AI.]`;
+    fullText = `[PDF document: "${fileName}", ${pageCount} pages. The full visual content will be analysed by Gemini/Vertex AI using multimodal input.]`;
   }
 
   const headerInfo = [
     title ? `Judul: ${title}` : null,
     author ? `Penulis: ${author}` : null,
     subject ? `Subjek: ${subject}` : null,
-    `Jumlah Halaman: ${pageCount}`
+    `Page count: ${pageCount}`
   ].filter(Boolean).join(' | ');
 
   const resultText = headerInfo ? `--- Metadata PDF: ${headerInfo} ---\n\n${fullText}` : fullText;
@@ -294,7 +294,7 @@ export async function parseDocxDocument(buffer: Uint8Array, fileName: string): P
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       size: buffer.length,
       category: 'document',
-      text: `[Dokumen Word: ${fileName}]`,
+      text: `[Word document: ${fileName}]`,
       previewSnippet: fileName
     };
   }
@@ -328,7 +328,7 @@ export async function parseDocxDocument(buffer: Uint8Array, fileName: string): P
     }
   }
 
-  const fullText = paragraphs.join('\n\n').trim() || `[Dokumen Word: ${fileName}]`;
+  const fullText = paragraphs.join('\n\n').trim() || `[Word document: ${fileName}]`;
   const preview = fullText.slice(0, 180).replace(/\s+/g, ' ');
 
   return {
@@ -381,7 +381,7 @@ export async function parsePptxDocument(buffer: Uint8Array, fileName: string): P
     }
   }
 
-  const fullText = slideTexts.join('\n\n').trim() || `[Presentasi PowerPoint: ${fileName}, ${slideEntries.length} slide]`;
+  const fullText = slideTexts.join('\n\n').trim() || `[PowerPoint presentation: ${fileName}, ${slideEntries.length} slides]`;
   const preview = fullText.slice(0, 180).replace(/\s+/g, ' ');
 
   return {
@@ -553,7 +553,7 @@ export async function parseDocumentFile(file: File): Promise<AttachedDocument> {
       type: file.type || 'image/png',
       size: file.size,
       category: 'image',
-      text: `[Gambar dilempirkan: ${file.name}, ukuran: ${(file.size / 1024).toFixed(1)} KB]`,
+      text: `[Image attached: ${file.name}, size: ${(file.size / 1024).toFixed(1)} KB]`,
       dataUrl,
       previewSnippet: file.name,
       wordCount: 0
@@ -626,7 +626,7 @@ export async function parseDocumentFile(file: File): Promise<AttachedDocument> {
     type: file.type || 'application/octet-stream',
     size: file.size,
     category: 'other',
-    text: `[File dilampirkan: ${file.name}, tipe: ${file.type || 'biner'}, ukuran: ${(file.size / 1024).toFixed(1)} KB]`,
+    text: `[File attached: ${file.name}, type: ${file.type || 'binary'}, size: ${(file.size / 1024).toFixed(1)} KB]`,
     previewSnippet: file.name
   };
 }

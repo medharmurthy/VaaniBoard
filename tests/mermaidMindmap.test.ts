@@ -4,9 +4,9 @@ import { markdownToMermaidMindmap, DEFAULT_MINDMAP } from '../components/Mermaid
 describe('Mermaid Mindmap Engine & Converter', () => {
   it('has valid default mindmap syntax starting with mindmap and root', () => {
     expect(DEFAULT_MINDMAP).toContain('mindmap');
-    expect(DEFAULT_MINDMAP).toContain('root((Sistem Peredaran Darah))');
-    expect(DEFAULT_MINDMAP).toContain('Jantung');
-    expect(DEFAULT_MINDMAP).toContain('Pembuluh Darah');
+    expect(DEFAULT_MINDMAP).toContain('root((Lesson topic))');
+    expect(DEFAULT_MINDMAP).toContain('Key idea');
+    expect(DEFAULT_MINDMAP).toContain('Practice');
   });
 
   it('converts markdown headings and bullet lists into hierarchical Mermaid mindmap syntax', () => {
@@ -46,7 +46,7 @@ describe('Mermaid Mindmap Engine & Converter', () => {
     expect(result).toContain('Subpoin 2.1');
   });
 
-  it('sanitizes special characters that conflict with Mermaid node syntax', () => {
+  it('quotes special characters without deleting label punctuation', () => {
     const markdown = `# Topik (Utama) [Penting]
 ## Cabang "Satu" {Kunci}
 - Detail (A) & (B)
@@ -54,9 +54,8 @@ describe('Mermaid Mindmap Engine & Converter', () => {
 
     const result = markdownToMermaidMindmap(markdown);
 
-    expect(result).not.toContain('Topik (Utama)');
-    expect(result).toContain('Topik Utama Penting');
-    expect(result).toContain('Cabang Satu Kunci');
-    expect(result).toContain('Detail A & B');
+    expect(result).toContain('root(("Topik (Utama) [Penting]"))');
+    expect(result).toContain('Cabang #quot;Satu#quot; {Kunci}');
+    expect(result).toContain('Detail (A) & (B)');
   });
 });

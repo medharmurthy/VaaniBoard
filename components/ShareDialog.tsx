@@ -45,14 +45,14 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
   const handleCopyLink = () => {
     navigator.clipboard.writeText(shareUrl);
     setCopiedLink(true);
-    toast.success('Tautan ruang berhasil disalin!');
+    toast.success('Room link copied!');
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleCopyPin = () => {
     navigator.clipboard.writeText(roomId);
     setCopiedPin(true);
-    toast.success(`Kode PIN ${roomId} berhasil disalin!`);
+    toast.success(`Room PIN ${roomId} copied!`);
     setTimeout(() => setCopiedPin(false), 2000);
   };
 
@@ -82,10 +82,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm text-[#0a1a3a]">
-                    {t('share', 'Bagikan')} Papan Tulis
+                    {t('share', 'Share')} board
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Sinkronisasi interaktif langsung ke layar siswa
+                    Share live board updates with students
                   </p>
                 </div>
               </div>
@@ -94,7 +94,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                 type="button"
                 onClick={onClose}
                 className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                title="Tutup"
+                title="Close"
               >
                 <X size={18} strokeWidth={2.4} />
               </button>
@@ -112,7 +112,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                 }`}
               >
                 <QrCode size={14} />
-                <span>Pindai QR Siswa</span>
+                <span>Pindai QR Student</span>
               </button>
               <button
                 type="button"
@@ -144,10 +144,10 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                   <div className="space-y-1">
                     <p className="text-xs font-extrabold text-[#0a1a3a] flex items-center justify-center gap-1.5">
                       <Smartphone size={14} className="text-[#1550aa]" />
-                      <span>Arahkan Kamera HP / Tablet Siswa</span>
+                      <span>Arahkan Kamera HP / Tablet Student</span>
                     </p>
                     <p className="text-[11px] text-slate-500 font-medium max-w-xs leading-relaxed">
-                      Siswa otomatis terhubung dan melihat pergerakan papan tulis secara live tanpa perlu login.
+                      Students can connect and see live board updates without signing in.
                     </p>
                   </div>
                 </div>
@@ -157,7 +157,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                   {/* Room PIN Code */}
                   <div className="bg-slate-50 rounded-2xl border border-slate-200 p-3.5 space-y-1.5">
                     <div className="flex justify-between items-center text-[10px] uppercase font-mono font-bold text-slate-400">
-                      <span>Kode Sesi / PIN Ruang</span>
+                      <span>Session code / room PIN</span>
                       <span className="text-emerald-600 flex items-center gap-1 font-sans">
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
                         Live Sync
@@ -173,7 +173,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                         className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         {copiedPin ? <CheckCircle2 size={13} className="text-emerald-600" /> : <Copy size={13} />}
-                        <span>{copiedPin ? 'Tersalin' : 'Salin PIN'}</span>
+                        <span>{copiedPin ? 'Copied' : 'Copy PIN'}</span>
                       </button>
                     </div>
                   </div>
@@ -182,7 +182,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                   <div className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
                       <Wifi size={13} className="text-[#1550aa]" />
-                      <span>Tautan WiFi / Jaringan Kelas:</span>
+                      <span>Classroom Wi-Fi / network link:</span>
                     </label>
                     <div className="flex items-center gap-2 p-1.5 bg-slate-50 rounded-xl border border-slate-300">
                       <input
@@ -197,7 +197,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
                         className="px-3.5 py-1.5 bg-[#1550aa] hover:bg-[#0a1a3a] text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1 cursor-pointer shrink-0"
                       >
                         {copiedLink ? <CheckCircle2 size={13} /> : <Copy size={13} />}
-                        <span>{copiedLink ? 'Tersalin' : 'Salin'}</span>
+                        <span>{copiedLink ? 'Copied' : 'Copy'}</span>
                       </button>
                     </div>
                   </div>
@@ -208,7 +208,7 @@ export const ShareDialog: React.FC<ShareDialogProps> = ({ isOpen, onClose, roomI
               <div className="w-full pt-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>Jaringan: {networkInfo?.primaryIp || 'Lokal'}</span>
+                  <span>Network: {networkInfo?.primaryIp || 'Local'}</span>
                 </span>
                 <span className="font-mono text-slate-400">Port :3030</span>
               </div>

@@ -21,6 +21,7 @@ import { sounds } from '../utils/sounds';
 import { useTranslation } from '../utils/translations';
 import { toast } from '../utils/toast';
 import { useAiStatus } from '../hooks/useAiStatus';
+import { localizeWarning, resolveSpeechLanguage } from '../utils/warningLanguage';
 
 interface ChatInterfaceProps {
   canvasRef: React.MutableRefObject<any>;
@@ -28,19 +29,15 @@ interface ChatInterfaceProps {
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
   const { t, language } = useTranslation();
+  const warningLanguage = useStore(state => state.warningLanguage);
   const [input, setInput] = useState('');
   const [interimInput, setInterimInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [micPermission, setMicPermission] = useState<'prompt' | 'granted' | 'denied'>('prompt');
-  const [speechSupported, setSpeechSupported] = useState(true);
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(true);
-  const [recordingMethod, setRecordingMethod] = useState<'webspeech' | 'mediarecorder'>('webspeech');
 
-  const transcriptBufferRef = useRef('');
-  const interimBufferRef = useRef('');
-  const isListeningRef = useRef(isListening);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [lastShape, setLastShape] = useState<CreatorTool>('RECTANGLE');
 
@@ -52,6 +49,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
 
   useEffect(() => {
     return () => {
+      if (mediaRecorderRef.current) { mediaRecorderRef.current.onstop = null; if (mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop(); }
+      audioStreamRef.current?.getTracks().forEach(track => track.stop());
       if (autoStopTimerRef.current) {
         clearTimeout(autoStopTimerRef.current);
         autoStopTimerRef.current = null;
@@ -59,9 +58,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
     };
   }, []);
 
-  useEffect(() => {
-    isListeningRef.current = isListening;
-  }, [isListening]);
+
 
   const {
     isThinking, isActing, actionQueue, logs,
@@ -84,50 +81,53 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
     ? (selectedOllamaModel || (liveAiStatus.mode === 'ollama' ? liveAiStatus.model : 'trido-model:latest') || 'trido-model:latest')
     : (aiPreference === 'vertex' || liveAiStatus.mode === 'vertex')
     ? (selectedVertexModel || 'Vertex AI')
-    : (selectedGeminiModel || 'Gemini Cloud');
+    : (liveAiStatus.model || selectedGeminiModel || 'Gemini Cloud');
+  const aiReadiness = liveAiStatus.reason === 'billing_required' ? 'AI billing required'
+    : liveAiStatus.reason === 'configured_not_probed' ? 'AI configured · unverified'
+    : liveAiStatus.online ? 'AI ready · last request verified' : 'AI unavailable · local tools ready';
 
   const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsTranscribing(true);
-    setVoiceNotice('Mengunggah & mentranskripsikan audio...');
+    useStore.getState().setWarningLanguage(useStore.getState().language);
+    setVoiceNotice('Uploading and transcribing audio…');
     try {
       const reader = new FileReader();
       reader.onloadend = async () => {
         try {
           const base64Audio = reader.result as string;
           const storeState = useStore.getState();
-          const response = await fetch('/api/ai/transcribe', {
+          const response = await fetch('/api/voice/stt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               base64Audio,
-              selectedVertexModel: storeState.selectedVertexModel,
-              selectedGeminiModel: storeState.selectedGeminiModel,
-              selectedOllamaModel: storeState.selectedOllamaModel,
-              language: storeState.language || 'id',
-              geminiApiKey: storeState.geminiApiKey,
-              aiPreference: storeState.aiPreference
+              language: storeState.language || 'hi',
+              engine: 'sarvam',
             })
           });
 
-          if (!response.ok) throw new Error(`Transkripsi gagal: ${response.statusText}`);
           const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Sarvam transcription failed.');
           if (data.text && data.text.trim()) {
+            useStore.getState().setWarningLanguage(resolveSpeechLanguage(data).warningLanguage);
+            useStore.getState().setLastVoiceCommand(data.text.trim());
+            setVoiceNotice(null);
             if (voiceConfig.autoSubmit) {
-              handleSubmitInternal(data.text.trim());
+              handleSubmitInternal(data.text.trim(), true);
             } else {
               setInput(data.text.trim());
               useStore.getState().setChatInputText(data.text.trim());
               if (!isAiDrawerOpen) useStore.getState().toggleAiDrawer();
-              toast.info('Hasil transkripsi dimasukkan ke kolom input.');
+              toast.info('Transcript ready for review.');
             }
           } else {
-            setVoiceNotice('Tidak ada ucapan terdeteksi dalam audio.');
+            setVoiceNotice('No speech recognised. Retry or type your command.');
           }
         } catch (err: any) {
-          setVoiceNotice('Gagal mentranskripsi: ' + (err.message || String(err)));
+          setVoiceNotice(err.message || 'Speech service unavailable. Retry or use text input.');
         } finally {
           setIsTranscribing(false);
         }
@@ -135,7 +135,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
       reader.readAsDataURL(file);
     } catch {
       setIsTranscribing(false);
-      setVoiceNotice('Gagal membaca file audio.');
+      setVoiceNotice('Unable to read recorded audio.');
     } finally {
       if (e.target) e.target.value = '';
     }
@@ -165,14 +165,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
         <div className="absolute bottom-4 lg:bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto z-40">
            <div className="bg-slate-900/80 backdrop-blur-md text-white text-[13px] font-medium px-4 py-2.5 rounded-2xl shadow-lg border border-white/10 flex items-center gap-3">
              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-             <span className="tracking-wide">{t('watchingTeacher', 'Anda sedang menonton layar guru')}</span>
+             <span className="tracking-wide">{t('watchingTeacher', 'You are viewing the teacher’s board')}</span>
            </div>
         </div>
       </div>
     );
   }
 
-  const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -250,363 +249,57 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
     }
   }, [logs, agentMessage]);
 
-  const requestMicPermission = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-      setMicPermission('granted');
-      return true;
-    } catch (err) {
-      console.error("Mic permission error:", err);
-      setMicPermission('denied');
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    // Check permission on mount if possible
-    navigator.permissions?.query?.({ name: 'microphone' as any }).then(status => {
-      setMicPermission(status.state as any);
-      status.onchange = () => setMicPermission(status.state as any);
-    }).catch(() => {
-      // Fallback if permissions API not supported
-    });
-
-    if (typeof window !== 'undefined') {
-      const hasSpeechRecognition = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
-      const hasMediaRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-
-      if (hasSpeechRecognition) {
-        setRecordingMethod('webspeech');
-        setSpeechSupported(true);
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true; // Use continuous for better experience
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = language === 'en' ? 'en-US' : 'id-ID';
-
-        recognitionRef.current.onresult = (event: any) => {
-          let finalTranscript = '';
-          let interimTranscript = '';
-
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            const result = event.results[i];
-            if (result.isFinal) {
-              finalTranscript += result[0].transcript;
-            } else {
-              interimTranscript += result[0].transcript;
-            }
-          }
-
-          if (finalTranscript) {
-            const trimmed = finalTranscript.trim();
-            if (trimmed) {
-              const currentBase = transcriptBufferRef.current;
-              const updated = currentBase ? currentBase + ' ' + trimmed : trimmed;
-              transcriptBufferRef.current = updated;
-              setInput(updated);
-              useStore.getState().setChatInputText(updated);
-              interimBufferRef.current = '';
-              setInterimInput('');
-              useStore.getState().setInterimInputText('');
-            }
-          } else {
-            interimBufferRef.current = interimTranscript;
-            setInterimInput(interimTranscript);
-            useStore.getState().setInterimInputText(interimTranscript);
-          }
-        };
-
-        recognitionRef.current.onspeechend = () => {
-          console.log("Speech ended detected");
-        };
-
-        recognitionRef.current.onstart = () => {
-          console.log("Speech recognition started");
-        };
-
-        recognitionRef.current.onerror = (event: any) => {
-          console.error("STT Error detailed:", event.error, event.message);
-          if (event.error === 'network') {
-            const msg = 'Pengenalan suara browser (Web Speech API) membutuhkan koneksi internet di Chrome/Windows. Saat offline, silakan ketik di kolom teks atau pilih template.';
-            setVoiceNotice(msg);
-            toast.warning(msg);
-          } else if (event.error === 'not-allowed') {
-            const msg = 'Izin mikrofon belum diberikan. Silakan izinkan akses mikrofon di peramban Anda.';
-            setVoiceNotice(msg);
-            toast.warning(msg);
-            setMicPermission('denied');
-          } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
-            const msg = `Perekaman suara terhenti (${event.error}).`;
-            setVoiceNotice(msg);
-          }
-
-          if (event.error !== 'no-speech' && event.error !== 'aborted') {
-            setIsListening(false);
-            stopVisualizer();
-          }
-        };
-
-        recognitionRef.current.onend = () => {
-          // Chrome SpeechRecognition natively stops after short silence (~8-10s).
-          // Silently resume if user is still actively recording, preserving all previous text.
-          if (isListeningRef.current && !isTranscribing) {
-            try {
-              recognitionRef.current.start();
-            } catch(e) {
-              // If already started or inactive, ignore
-            }
-          }
-        };
-      } else if (hasMediaRecorder) {
-        setRecordingMethod('mediarecorder');
-        setSpeechSupported(true);
-        recognitionRef.current = null;
-      } else {
-        setSpeechSupported(false);
-        recognitionRef.current = null;
+  const handleVoiceToggle = async () => {
+    if (isListening) {
+      setIsListening(false);
+      if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
+      stopVisualizer();
+      if (mediaRecorderRef.current?.state === 'recording') {
+        setIsTranscribing(true); mediaRecorderRef.current.stop();
       }
-    }
-  }, [language]);
-
-  useEffect(() => {
-    const handleStartMic = () => {
-      if (!isListening) toggleListening();
-    };
-    window.addEventListener('start-mic', handleStartMic);
-    return () => window.removeEventListener('start-mic', handleStartMic);
-  }, [isListening]);
-
-  const toggleListening = async () => {
-    if (transcribeMode === 'upload_audio') {
-      audioUploadInputRef.current?.click();
       return;
     }
-
-    const isWebSpeech = transcribeMode === 'webspeech';
-
-    if (isListening) {
-      if (autoStopTimerRef.current) {
-        clearTimeout(autoStopTimerRef.current);
-        autoStopTimerRef.current = null;
-      }
-      setIsListening(false);
-      sounds.play('mic_off');
-      stopVisualizer();
-
-      if (isWebSpeech) {
-        recognitionRef.current?.stop();
-        // Wait up to 600ms for final SpeechRecognition results to flush
-        await new Promise(r => setTimeout(r, 600));
-        const finalLocalTranscript = transcriptBufferRef.current.trim() || interimBufferRef.current.trim();
-        if (finalLocalTranscript || useStore.getState().attachedDocument || useStore.getState().lastUploadedImage) {
-          if (voiceConfig.autoSubmit) {
-            handleSubmitInternal(finalLocalTranscript);
-          } else {
-            setInput(finalLocalTranscript);
-            useStore.getState().setChatInputText(finalLocalTranscript);
-            if (!isAiDrawerOpen) useStore.getState().toggleAiDrawer();
-            toast.info('Hasil suara dimasukkan ke kolom input.');
-          }
-        }
-        transcriptBufferRef.current = '';
-        interimBufferRef.current = '';
-        if (voiceConfig.autoSubmit) setInput('');
-        setInterimInput('');
-        if (voiceConfig.autoSubmit) useStore.getState().setChatInputText('');
-        useStore.getState().setInterimInputText('');
-      } else {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          setIsTranscribing(true);
-          mediaRecorderRef.current.stop();
-        }
-      }
-    } else {
-      if (isWebSpeech && !speechSupported) {
-        const fallbackMessage = t('voiceUnsupported', 'Browser ini belum mendukung fitur pengenalan suara lokal (Web Speech API). Silakan gunakan kolom teks.');
-        setVoiceNotice(fallbackMessage);
-        if (!isAiDrawerOpen) useStore.getState().toggleAiDrawer();
-        return;
-      }
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setVoiceNotice("Akses mikrofon tidak didukung di peramban ini.");
-        return;
-      }
-
-      try {
-        setVoiceNotice(null);
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: voiceConfig.echoCancellation,
-            noiseSuppression: voiceConfig.noiseSuppression,
-            autoGainControl: voiceConfig.autoGainControl
-          }
-        });
-        audioStreamRef.current = stream;
-        setMicPermission('granted');
-
-        sounds.play('mic_on');
-        setIsListening(true);
-        setInput('');
-        setInterimInput('');
-        transcriptBufferRef.current = '';
-        interimBufferRef.current = '';
-
-        startVisualizer(stream);
-
-        if (isWebSpeech) {
-          if (recognitionRef.current) {
-            const targetLang = voiceConfig.language === 'en-US' ? 'en-US' : (voiceConfig.language === 'id-ID' ? 'id-ID' : (language === 'en' ? 'en-US' : 'id-ID'));
-            recognitionRef.current.lang = targetLang;
-            try { recognitionRef.current.stop(); } catch(e) {}
-
-            setTimeout(() => {
-              try {
-                recognitionRef.current.start();
-              } catch(e) {
-                setIsListening(false);
-                stopVisualizer();
-              }
-            }, 100);
-          }
-        } else {
-          chunksRef.current = [];
-          let options = {};
-          if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-            options = { mimeType: 'audio/webm;codecs=opus' };
-          } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-            options = { mimeType: 'audio/webm' };
-          } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
-            options = { mimeType: 'audio/ogg;codecs=opus' };
-          } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-            options = { mimeType: 'audio/mp4' };
-          }
-
-          const mediaRecorder = new MediaRecorder(stream, options);
-          mediaRecorderRef.current = mediaRecorder;
-
-          mediaRecorder.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-              chunksRef.current.push(e.data);
-            }
-          };
-
-          mediaRecorder.onstop = async () => {
-            const blobType = mediaRecorder.mimeType || 'audio/webm';
-            const audioBlob = new Blob(chunksRef.current, { type: blobType });
-            
-            if (audioStreamRef.current) {
-              audioStreamRef.current.getTracks().forEach(track => track.stop());
-              audioStreamRef.current = null;
-            }
-
-            const reader = new FileReader();
-            reader.readAsDataURL(audioBlob);
-            reader.onloadend = async () => {
-              const storeState = useStore.getState() as any;
-              try {
-                const base64 = (reader.result as string).split(',')[1];
-                const aiPreference = storeState.aiPreference || 'auto';
-                const geminiApiKey = storeState.geminiApiKey || undefined;
-                const ollamaBaseUrl = storeState.ollamaBaseUrl || undefined;
-
-                const response = await fetch('/api/ai/transcribe', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
-                    base64Audio: base64,
-                    aiPreference,
-                    geminiApiKey,
-                    ollamaBaseUrl,
-                    selectedVertexModel: storeState.selectedVertexModel,
-                    selectedGeminiModel: storeState.selectedGeminiModel,
-                    selectedOllamaModel: storeState.selectedOllamaModel,
-                    language: storeState.language || 'id'
-                  })
-                });
-
-                if (!response.ok) {
-                  throw new Error(`Transcription failed: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-                if (data.text && data.text.trim()) {
-                  if (voiceConfig.autoSubmit) {
-                    handleSubmitInternal(data.text.trim());
-                  } else {
-                    setInput(data.text.trim());
-                    useStore.getState().setChatInputText(data.text.trim());
-                    if (!isAiDrawerOpen) useStore.getState().toggleAiDrawer();
-                    toast.info('Hasil transkripsi dimasukkan ke kolom input.');
-                  }
-                }
-              } catch (err: any) {
-                console.error("Transcription error:", err);
-                const isOfflineOllama = storeState.aiPreference === 'ollama' || (typeof navigator !== 'undefined' && !navigator.onLine);
-                const fallbackNotice = isOfflineOllama
-                  ? 'Transkripsi audio AI membutuhkan koneksi internet (Gemini Cloud Audio). Model Ollama lokal di laptop memproses teks dan tools secara offline. Silakan ketik perintah di kolom input.'
-                  : `Gagal mentranskripsi suara: ${err.message || String(err)}`;
-                setVoiceNotice(fallbackNotice);
-                toast.warning(fallbackNotice);
-              } finally {
-                setIsTranscribing(false);
-              }
-            };
-          };
-
-          // Continuous recording: records uninterrupted until teacher explicitly clicks stop button
-          mediaRecorder.start(transcribeMode === 'gemini_live' ? 3000 : undefined);
-
-          // Clear any dangling auto-stop timer to prevent accidental cutoffs
-          if (autoStopTimerRef.current) {
-            clearTimeout(autoStopTimerRef.current);
-            autoStopTimerRef.current = null;
-          }
-        }
-      } catch (err) {
-        setMicPermission('denied');
-        setVoiceNotice("Mohon izinkan akses mikrofon, atau gunakan input teks.");
-        if (!isAiDrawerOpen) useStore.getState().toggleAiDrawer();
-      }
+    if (transcribeMode === 'upload_audio') { audioUploadInputRef.current?.click(); return; }
+    useStore.getState().setWarningLanguage(useStore.getState().language);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceNotice('Microphone recording is unavailable. Open localhost/HTTPS or use text input.'); return;
     }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:voiceConfig.echoCancellation,noiseSuppression:voiceConfig.noiseSuppression,autoGainControl:voiceConfig.autoGainControl}});
+      audioStreamRef.current = stream;
+      setMicPermission('granted'); setVoiceNotice(null); setIsListening(true);
+      setInput(''); setInterimInput(''); chunksRef.current=[]; startVisualizer(stream); sounds.play('mic_on');
+      const mimeType=['audio/webm;codecs=opus','audio/webm','audio/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
+      const recorder=new MediaRecorder(stream,mimeType?{mimeType}:undefined);mediaRecorderRef.current=recorder;
+      recorder.ondataavailable=e=>{if(e.data.size)chunksRef.current.push(e.data);};
+      recorder.onstop=()=>{
+        stream.getTracks().forEach(t=>t.stop());audioStreamRef.current=null;
+        if(autoStopTimerRef.current)clearTimeout(autoStopTimerRef.current);
+        setIsListening(false);setIsTranscribing(true);stopVisualizer();
+        const blob=new Blob(chunksRef.current,{type:recorder.mimeType||'audio/webm'});
+        const reader=new FileReader();
+        reader.onloadend=async()=>{
+          try {
+            const response=await fetch('/api/voice/stt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base64Audio:reader.result,language:useStore.getState().language,engine:'sarvam'})});
+            const result=await response.json();
+            if(!response.ok)throw new Error(result.error||'Sarvam transcription failed.');
+            if(!result.text?.trim())throw new Error('No speech recognised. Retry or type your command.');
+            useStore.getState().setWarningLanguage(resolveSpeechLanguage(result).warningLanguage);
+            useStore.getState().setLastVoiceCommand(result.text.trim());
+            if(voiceConfig.autoSubmit)handleSubmitInternal(result.text.trim(), true);
+            else {setInput(result.text.trim());useStore.getState().setChatInputText(result.text.trim());if(!isAiDrawerOpen)useStore.getState().toggleAiDrawer();}
+          } catch(error) {const msg=error instanceof Error?error.message:'Sarvam unavailable. Use text input.';setVoiceNotice(msg);toast.warning(msg);}
+          finally {setIsTranscribing(false);}
+        };
+        reader.onerror=()=>{setIsTranscribing(false);setVoiceNotice('Unable to read recorded audio.');};
+        reader.readAsDataURL(blob);
+      };
+      recorder.start();
+      autoStopTimerRef.current=setTimeout(()=>{if(recorder.state==='recording'){setIsListening(false);setIsTranscribing(true);stopVisualizer();recorder.stop();}},25000);
+    } catch {audioStreamRef.current?.getTracks().forEach(t=>t.stop());setIsListening(false);setMicPermission('denied');setVoiceNotice('Allow microphone permission, or use text input.');}
   };
 
-  const handleSendVoice = () => {
-    if (autoStopTimerRef.current) {
-      clearTimeout(autoStopTimerRef.current);
-      autoStopTimerRef.current = null;
-    }
-    const isWebSpeech = transcribeMode === 'webspeech';
-    if (isWebSpeech) {
-      const finalInput = transcriptBufferRef.current.trim() || interimBufferRef.current.trim();
-      if (finalInput || useStore.getState().attachedDocument || useStore.getState().lastUploadedImage) {
-        handleSubmitInternal(finalInput);
-        transcriptBufferRef.current = '';
-        interimBufferRef.current = '';
-        setInput('');
-        setInterimInput('');
-        useStore.getState().setChatInputText('');
-        useStore.getState().setInterimInputText('');
-      }
-
-      if (isListening) {
-        setIsListening(false);
-        recognitionRef.current?.stop();
-        stopVisualizer();
-      }
-    } else {
-      if (isListening) {
-        setIsListening(false);
-        stopVisualizer();
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-          setIsTranscribing(true);
-          mediaRecorderRef.current.stop();
-        }
-      }
-    }
-  };
-
+  const handleSendVoice = () => { if (isListening) void handleVoiceToggle(); };
 
   const handleCanvasImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -615,7 +308,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64 = event.target?.result as string;
-      useStore.getState().addLog(`Gambar dimasukkan ke kanvas: ${file.name}`);
+      useStore.getState().addLog(`Image added to canvas: ${file.name}`);
 
       if (canvasRef.current) {
         window.fabric.Image.fromURL(base64, (img: any) => {
@@ -639,13 +332,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
     handleSubmitInternal(input);
   };
 
-  const handleSubmitInternal = async (text: string) => {
+  const handleSubmitInternal = async (text: string, fromVoice = false) => {
+    if (!fromVoice && text.trim() !== useStore.getState().lastVoiceCommand) useStore.getState().setWarningLanguage(useStore.getState().language);
     const attachedDoc = useStore.getState().attachedDocument;
     const defaultPrompt = attachedDoc 
       ? (attachedDoc.category === 'image' 
-          ? t('pleaseAnalyzeImage', 'Tolong analisa gambar ini.') 
-          : t('pleaseAnalyzeDocument', 'Tolong analisa dokumen ini dan jelaskan poin-poin pentingnya di whiteboard.'))
-      : (useStore.getState().lastUploadedImage ? t('pleaseAnalyzeImage', 'Tolong analisa gambar ini.') : '');
+          ? t('pleaseAnalyzeImage', 'Please analyse this image.')
+          : t('pleaseAnalyzeDocument', 'Please analyse this document and summarise its key points on the board.'))
+      : (useStore.getState().lastUploadedImage ? t('pleaseAnalyzeImage', 'Please analyse this image.') : '');
     const finalTxt = text.trim() || defaultPrompt;
     if (!finalTxt || isThinking) return;
     setInput('');
@@ -663,7 +357,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
         if (obj.isDomPlaceholder) removeDomElement(obj.id);
       });
       canvas.discardActiveObject().requestRenderAll();
-      useStore.getState().addLog(`Menghapus ${activeObjects.length} objek.`);
+      useStore.getState().addLog(`Deleted ${activeObjects.length} object(s).`);
     }
   };
 
@@ -711,7 +405,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
         <div className="flex-1 hidden md:block"></div>
 
         {/* Center: AI Status & Voice Control */}
-        <div className="relative flex flex-col items-center gap-2">
+        <div data-board-occluder="true" className="relative flex max-w-full flex-col items-center gap-2">
 
           {/* Persistent Voice Notice / Error Banner */}
           <AnimatePresence>
@@ -724,12 +418,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
               >
                 <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                 <div className="flex-1 font-medium leading-relaxed">
-                  {voiceNotice}
+                  {localizeWarning(voiceNotice, warningLanguage)}
                 </div>
                 <button
                   onClick={() => setVoiceNotice(null)}
                   className="text-amber-500 hover:text-amber-800 p-0.5 rounded cursor-pointer transition-colors"
-                  title="Tutup"
+                  title="Close"
                 >
                   <X size={14} />
                 </button>
@@ -794,28 +488,28 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
                  animate={{ opacity: 1, y: 0, scale: 1 }}
                  exit={{ opacity: 0, y: 20, scale: 0.95, pointerEvents: 'none' }}
                  transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                 className="pointer-events-auto flex items-center gap-3 px-3 py-3 bg-white/95 backdrop-blur-xl rounded-4xl shadow-[0_20px_40px_rgb(0,0,0,0.08)] border border-white/80 origin-bottom"
+                 className="voice-control-dock pointer-events-auto flex max-w-full items-center gap-2 sm:gap-3 px-3 py-3 bg-white/95 backdrop-blur-xl rounded-2xl shadow-lg border border-slate-200 origin-bottom"
               >
-                 <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center text-blue-600 transition-all ${isListening ? '' : 'w-11 h-11 rounded-[1.2rem] bg-blue-50/80 border border-blue-100 shadow-sm'}`}>
+                 <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className={`hidden sm:flex items-center justify-center text-blue-600 transition-all ${isListening ? '' : 'w-11 h-11 rounded-[1.2rem] bg-blue-50/80 border border-blue-100 shadow-sm'}`}>
                        {isListening ? <AudioVisualizer isListening={isListening} audioData={audioData} /> :
                         isThinking ? <Loader2 size={20} className="animate-spin" /> :
                         isTranscribing ? <Activity size={20} className="animate-pulse" /> :
                         <Sparkles size={20} />}
                     </div>
-                    <div className="flex flex-col">
-                       <span className="text-[13.5px] font-bold text-slate-800 leading-tight whitespace-nowrap">
-                         {isThinking ? `${t('processingWithModel', 'Memproses dengan AI...')} (${activeModelDisplay})` :
-                          isTranscribing ? t('transcribingVoice', 'Menerjemahkan...') :
-                          isListening ? (speechSupported ? t('listening', 'Mendengarkan...') : t('recordingVoice', 'Merekam...')) :
+                    <div className="flex min-w-0 flex-col">
+                       <span className="text-xs sm:text-[13.5px] font-bold text-slate-800 leading-tight truncate">
+                         {isThinking ? `${t('processingWithModel', 'Processing with AI…')} (${activeModelDisplay})` :
+                          isTranscribing ? t('transcribingVoice', 'Transcribing…') :
+                          isListening ? 'Recording with Sarvam…' :
                           voiceNotice ? '⚠️ Perhatian' :
-                          t('allSystemsReady', 'Semua Sistem Siap')}
+                          aiReadiness}
                        </span>
-                       <span className="text-[11.5px] font-medium text-slate-500 flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+                       <span className="text-[11px] font-medium text-slate-500 flex min-w-0 items-center gap-1.5 mt-0.5 whitespace-nowrap overflow-hidden">
                          {isListening || isThinking ? (
                             <span className="flex gap-1.5 items-center">
                               <span className={isOfflineMode ? "text-emerald-600 font-bold" : "text-blue-600 font-bold"}>
-                                {activeModelDisplay} • {isOfflineMode ? 'Mode Offline (Ollama)' : 'Cloud Realtime'}
+                                {activeModelDisplay} • {isOfflineMode ? 'Local AI (Ollama)' : liveAiStatus.mode === 'cline' ? 'Cline credits' : 'Cloud AI'}
                               </span>
                               <div className="flex gap-1">
                                 <div className={`w-1.5 h-1.5 ${isOfflineMode ? 'bg-emerald-500' : 'bg-blue-500'} rounded-full animate-bounce`} />
@@ -825,16 +519,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
                             </span>
                          ) : voiceNotice ? (
                             <span className="text-amber-500">{voiceNotice.slice(0, 40)}{voiceNotice.length > 40 ? '…' : ''}</span>
-                         ) : speechSupported ? (
+                         ) : (
                             <span className="flex items-center gap-1.5 font-medium">
                               <span className={`w-2 h-2 rounded-full ${isOfflineMode ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-                              <span>{activeModelDisplay}</span>
-                              <span className="text-slate-400">•</span>
+                              <span className="hidden sm:inline">{activeModelDisplay}</span>
+                              <span className="hidden sm:inline text-slate-400">•</span>
                               <span className={isOfflineMode ? 'text-emerald-600 font-semibold' : 'text-slate-500'}>
-                                {isOfflineMode ? '100% Offline' : t('standbyMode', 'Mode Siaga')}
+                                {!liveAiStatus.online ? 'Local activities available' : isOfflineMode ? 'Local AI' : liveAiStatus.mode === 'cline' ? 'Cline credits' : t('standbyMode', 'Standby mode')}
                               </span>
                             </span>
-                         ) : t('limitedVoiceDesc', 'Gunakan teks')}
+                         )}
                        </span>
                     </div>
                  </div>
@@ -844,13 +538,13 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
                     <FileUploadButton
                       className="w-11 h-11 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-[1.2rem] transition-colors active:scale-95"
                       icon={<Plus size={22} />}
-                      title={t('uploadFileOrImage', 'Unggah file / dokumen / gambar')}
+                      title={t('uploadFileOrImage', 'Upload file / document / image')}
                     />
 
                     <button
-                      onClick={() => { setShowTranscript(true); toggleListening(); }}
+                      onClick={() => { setShowTranscript(true); void handleVoiceToggle(); }}
                       disabled={isTranscribing || isThinking}
-                      title={speechSupported ? t('startVoiceInput', 'Mulai input suara') : t('recordVoiceForTranscription', 'Rekam suara')}
+                      title={isListening ? 'Stop recording and transcribe with Sarvam' : 'Record speech with Sarvam'}
                       className={`w-12 h-12 flex items-center justify-center rounded-[1.3rem] text-white shadow-lg transition-all duration-300 ${isListening ? 'bg-red-500 shadow-red-500/25 animate-pulse scale-105 ring-4 ring-red-500/10' : 'bg-blue-600 shadow-blue-600/30 hover:scale-105 hover:bg-blue-500'} disabled:opacity-50 disabled:pointer-events-none active:scale-95 shrink-0`}
                     >
                       <Mic size={20} />
@@ -860,7 +554,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
                       <button
                         onClick={() => abortTask()}
                         className="w-12 h-12 flex items-center justify-center bg-rose-50 text-red-500 rounded-[1.3rem] hover:bg-red-100 hover:text-red-600 transition-all font-bold group active:scale-95 border border-red-100 shrink-0"
-                        title={t('cancelProcess', 'Batalkan Proses')}
+                        title={t('cancelProcess', 'Cancelkan Proses')}
                       >
                         <Square size={16} className="fill-current group-hover:scale-90 transition-transform" />
                       </button>
@@ -875,6 +569,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
         <div className="pointer-events-auto flex-1 hidden md:flex justify-end gap-3">
            {/* Sleek History & Action Card */}
            <motion.div
+             data-board-occluder="true"
              initial={{ opacity: 0, y: 20 }}
              animate={{ opacity: 1, y: 0 }}
              transition={{ duration: 0.5, delay: 0.05 }}
@@ -882,14 +577,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
            >
              <button
                onClick={() => undoCanvas()}
-               title={language === 'en' ? 'Undo' : 'Batal (Undo)'}
+               title={language === 'en' ? 'Undo' : 'Undo'}
                className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-colors active:scale-90"
              >
                <Undo2 size={16} />
              </button>
              <button
                onClick={() => redoCanvas()}
-               title={language === 'en' ? 'Redo' : 'Ulangi (Redo)'}
+               title={language === 'en' ? 'Redo' : 'Redo'}
                className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-xl transition-colors active:scale-90"
              >
                <Redo2 size={16} />
@@ -897,7 +592,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ canvasRef }) => {
              <div className="w-px h-5 bg-slate-200/80 mx-1.5" />
              <button
                onClick={handleDeleteSelection}
-               title={language === 'en' ? 'Delete Selected Element' : 'Hapus Elemen Terpilih'}
+               title={language === 'en' ? 'Delete Selected Element' : 'Delete selected element'}
                className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors active:scale-90"
              >
                <Trash2 size={16} />

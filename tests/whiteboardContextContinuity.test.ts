@@ -7,9 +7,9 @@ describe('Whiteboard & Multi-turn Session Context Continuity', () => {
       'mermaid_mm_1': {
         id: 'mermaid_mm_1',
         componentType: 'MERMAID_DIAGRAM',
-        title: 'Mindmap Bahasa Indonesia',
+        title: 'Mindmap Hindi',
         config: {
-          code: 'mindmap\n  root((Bahasa Indonesia))\n    Tata Bahasa\n    Kesusastraan'
+          code: 'mindmap\n  root((Hindi))\n    Swar\n    Vyanjan'
         }
       }
     };
@@ -20,18 +20,18 @@ describe('Whiteboard & Multi-turn Session Context Continuity', () => {
       { current: 0, total: 1 },
       existingDomElements,
       {
-        subject: 'Bahasa Indonesia',
-        topic: 'Tata Bahasa',
+        subject: 'Hindi',
+        topic: 'Swar',
         phase: 'core',
-        existingMindmapNodes: ['Tata Bahasa', 'Kesusastraan']
+        existingMindmapNodes: ['Swar', 'Vyanjan']
       }
     );
 
     // Verify system instruction contains the active whiteboard objects
-    expect(instruction).toContain('Mindmap Bahasa Indonesia');
-    expect(instruction).toContain('Tata Bahasa');
-    expect(instruction).toContain('Kesusastraan');
-    expect(instruction).toContain('MULTI-TURN SESSION & WHITEBOARD AWARENESS');
+    expect(instruction).toContain('Mindmap Hindi');
+    expect(instruction).toContain('Swar');
+    expect(instruction).toContain('Vyanjan');
+    expect(instruction).toContain('Preserve existing content');
     expect(instruction).toContain('update_component');
   });
 
@@ -60,6 +60,6 @@ describe('Whiteboard & Multi-turn Session Context Continuity', () => {
 
     expect(instruction).toContain('Class Timer');
     expect(instruction).toContain('Meeting Notes');
-    expect(instruction).toContain('MULTILINGUAL & GLOBAL INCLUSIVITY');
+    expect(instruction).toContain('native-script labels');
   });
 });

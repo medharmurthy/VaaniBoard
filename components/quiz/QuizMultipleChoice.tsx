@@ -31,13 +31,13 @@ export const QuizMultipleChoice: React.FC<QuizMultipleChoiceProps> = ({ config }
     config?.statement || 
     config?.questions?.[0]?.question || 
     config?.title || 
-    'Pertanyaan Kuis';
+    'Quiz question';
 
   // Extract options
   const rawOptions = config?.options || config?.questions?.[0]?.options;
   const options = Array.isArray(rawOptions) && rawOptions.length > 0 
     ? rawOptions 
-    : ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D'];
+    : ['Option A', 'Option B', 'Option C', 'Option D'];
 
   // Extract correct index
   const correctIdx = config?.correctIndex ?? 
@@ -57,15 +57,15 @@ export const QuizMultipleChoice: React.FC<QuizMultipleChoiceProps> = ({ config }
         onClick={() => {
           const text = `${questionText}\n\n${options.map((o, i) => `${String.fromCharCode(65 + i)}. ${o}`).join('\n')}`;
           navigator.clipboard.writeText(text);
-          toast.success('Soal berhasil disalin!');
+          toast.success('Question copied!');
         }}
         className="absolute top-4 right-4 p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors no-print"
-        title="Salin Teks Soal"
+        title="Copy question text"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
       </button>
 
-      <span className="text-[11px] font-black tracking-widest text-indigo-600 uppercase mb-2">🎯 Kuis Pilihan Ganda</span>
+      <span className="text-[11px] font-black tracking-widest text-indigo-600 uppercase mb-2">🎯 Multiple-choice quiz</span>
 
       <h3 className="mb-5 text-lg font-bold text-slate-800 leading-snug pr-8">
         {questionText}
@@ -119,7 +119,7 @@ export const QuizMultipleChoice: React.FC<QuizMultipleChoiceProps> = ({ config }
              onClick={() => setSubmitted(true)}
              className="w-full bg-indigo-600 font-bold text-white py-3 rounded-xl shadow-md shadow-indigo-200 hover:bg-indigo-700 transition disabled:opacity-40 disabled:shadow-none uppercase tracking-wider text-xs no-print"
            >
-             Periksa Jawaban
+             Check answer
            </button>
         ) : (
            <div className="flex flex-col gap-2">
@@ -128,11 +128,11 @@ export const QuizMultipleChoice: React.FC<QuizMultipleChoiceProps> = ({ config }
                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
                    {isCorrect ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-4 h-4"><polyline points="20 6 9 17 4 12"></polyline></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>}
                  </div>
-                 <span className="font-bold text-sm">{isCorrect ? 'Hebat! Jawaban Anda Benar' : 'Jawaban Kurang Tepat'}</span>
+                 <span className="font-bold text-sm">{isCorrect ? 'Well done! Your answer is correct' : 'Not quite right'}</span>
                </div>
                {explanation && (
                  <p className="text-xs text-slate-600 mt-1 pl-8 leading-relaxed">
-                   <strong>Pembahasan:</strong> {explanation}
+                   <strong>Explanation:</strong> {explanation}
                  </p>
                )}
              </div>
@@ -142,7 +142,7 @@ export const QuizMultipleChoice: React.FC<QuizMultipleChoiceProps> = ({ config }
                  onClick={() => { setSelected(null); setSubmitted(false); }}
                  className="flex-1 bg-slate-100 font-bold text-slate-600 py-2.5 rounded-xl hover:bg-slate-200 transition text-xs uppercase tracking-wider no-print"
                >
-                 Coba Lagi
+                 Try again
                </button>
              </div>
            </div>

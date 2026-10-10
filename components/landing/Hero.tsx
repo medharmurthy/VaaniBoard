@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { motion, useScroll, useTransform } from "framer-motion";
+import { motion, useScroll, useTransform } from "motion/react";
 import { ArrowDown, ArrowUpRight, Mic, Download, Monitor } from "lucide-react";
 import { useI18n } from "./i18n";
 import { Mark, useMedia } from "./shared";
@@ -29,7 +29,7 @@ function Rise({ text, delay = 0 }: { text: string; delay?: number }) {
 
 function SpinBadge() {
   const { lang } = useI18n();
-  const text = lang === "id" ? "SUARA DULU • AI SMARTBOARD • UNTUK GURU • " : "VOICE FIRST • AI SMARTBOARD • FOR TEACHERS • ";
+  const text = lang === "hi" ? "SUARA DULU • AI SMARTBOARD • UNTUK GURU • " : "VOICE FIRST • AI SMARTBOARD • FOR TEACHERS • ";
   return (
     <div className="relative h-[8.5rem] w-[8.5rem] xl:h-[10rem] xl:w-[10rem]">
       <motion.svg

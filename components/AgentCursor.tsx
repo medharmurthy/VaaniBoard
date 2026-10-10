@@ -83,7 +83,8 @@ export const AgentCursor: React.FC = () => {
     timeColor = 'text-amber-300';
   }
 
-  const isVisible = isThinking || isActing || !!displayMessage;
+  // Completed responses live in the assistant drawer; do not obscure the lesson with an idle cursor.
+  const isVisible = isThinking || isActing;
   
   return (
     <div
@@ -91,10 +92,11 @@ export const AgentCursor: React.FC = () => {
       className={`pointer-events-none fixed top-0 left-0 z-[100] flex flex-col items-start transition-opacity duration-300 will-change-transform ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       style={{
         transform: `translate3d(${screenX}px, ${screenY}px, 0)`,
+        visibility: isVisible ? 'visible' : 'hidden',
       }}
     >
       {/* SPEECH BUBBLE */}
-      {displayMessage && (
+      {isVisible && displayMessage && (
         <div className="absolute bottom-8 left-4 z-50 animate-in slide-in-from-bottom-2 fade-in duration-300 pointer-events-auto">
           <details className="relative rounded-2xl rounded-bl-none bg-white shadow-2xl border border-slate-200 overflow-hidden group min-w-[200px] max-w-[320px]">
             <summary className="p-3 text-sm font-semibold text-blue-600 cursor-pointer hover:bg-slate-50 list-none flex items-center gap-2 select-none [&::-webkit-details-marker]:hidden relative">
@@ -102,7 +104,7 @@ export const AgentCursor: React.FC = () => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-600 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
               </span>
-              Trido AI Merespons
+              {isThinking || isActing ? 'Vaani Board working' : 'Vaani Board message'}
               <ChevronDown size={16} className="ml-auto group-open:rotate-180 transition-transform" />
             </summary>
             <div className="px-3 pb-3 pt-1 text-xs font-medium text-slate-800 border-t border-slate-100 max-h-[300px] overflow-y-auto whitespace-pre-wrap">

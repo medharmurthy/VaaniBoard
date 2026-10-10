@@ -15,7 +15,7 @@ interface FileUploadButtonProps {
 export const FileUploadButton: React.FC<FileUploadButtonProps> = ({ 
   className, 
   icon = <Paperclip size={18} />, 
-  title = "Unggah file / dokumen / gambar",
+  title = "Upload a file, document or image",
   disabled = false
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -26,28 +26,28 @@ export const FileUploadButton: React.FC<FileUploadButtonProps> = ({
     if (!file) return;
 
     setIsProcessing(true);
-    toast.info(`Membaca "${file.name}"...`);
+    toast.info(`Reading "${file.name}"...`);
 
     try {
       const attached = await parseDocumentFile(file);
       useStore.getState().setAttachedDocument(attached);
 
-      let logMsg = `[File dilampirkan: ${file.name}]`;
+      let logMsg = `[File attached: ${file.name}]`;
       if (attached.category === 'pdf') {
-        logMsg = `[PDF dilampirkan: ${file.name} (${attached.pageCount || 1} hlm, ${(file.size / 1024).toFixed(1)} KB)]`;
+        logMsg = `[PDF attached: ${file.name} (${attached.pageCount || 1} pages, ${(file.size / 1024).toFixed(1)} KB)]`;
       } else if (attached.category === 'image') {
-        logMsg = `[Gambar dilampirkan: ${file.name}]`;
+        logMsg = `[Image attached: ${file.name}]`;
       } else {
-        logMsg = `[Dokumen dilampirkan: ${file.name} (${attached.category.toUpperCase()}, ${(file.size / 1024).toFixed(1)} KB)]`;
+        logMsg = `[Document attached: ${file.name} (${attached.category.toUpperCase()}, ${(file.size / 1024).toFixed(1)} KB)]`;
       }
 
       useStore.getState().addMessage({ role: 'user', text: logMsg });
-      useStore.getState().addLog(`Dokumen siap dianalisis: ${file.name}`);
+      useStore.getState().addLog(`Document ready for analysis: ${file.name}`);
       sounds.play('click');
-      toast.success(`"${file.name}" siap dianalisis!`);
+      toast.success(`"${file.name}" is ready for analysis.`);
     } catch (err: any) {
       console.error('Error parsing document:', err);
-      toast.error(`Gagal membaca file: ${err.message || 'Format tidak dikenal'}`);
+      toast.error(`Could not read the file: ${err.message || 'Unknown format'}`);
     } finally {
       setIsProcessing(false);
       if (fileInputRef.current) {

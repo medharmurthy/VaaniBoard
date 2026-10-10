@@ -18,9 +18,9 @@ export type SmartboardLayoutMode = 'classic' | 'dock' | 'radial';
 
 export type CreatorTool = 'SELECT' | 'PENCIL' | 'ERASER' | 'TEXT' | 'RECTANGLE' | 'CIRCLE' | 'TRIANGLE' | 'STAR' | 'POLYGON' | 'LINE' | 'ARROW' | 'DIAMOND' | 'SPEECH_BUBBLE' | 'HEART' | 'PENTAGON';
 
-export type AiPreference = 'auto' | 'gemini' | 'ollama' | 'vertex';
-export type AiRuntimeMode = 'gemini' | 'ollama' | 'vertex' | 'unavailable';
-export type TranscribeMode = 'faster_whisper' | 'webspeech' | 'record_gemini' | 'gemini_live' | 'upload_audio';
+export type AiPreference = 'auto' | 'cline' | 'gemini' | 'ollama' | 'vertex' | 'sarvam';
+export type AiRuntimeMode = 'gemini' | 'ollama' | 'vertex' | 'sarvam' | 'unavailable';
+export type TranscribeMode = 'sarvam' | 'upload_audio';
 
 export type DocumentCategory = 'pdf' | 'document' | 'spreadsheet' | 'presentation' | 'text' | 'code' | 'image' | 'other';
 
@@ -36,18 +36,25 @@ export interface AttachedDocument {
   wordCount?: number;
 }
 
-export type SupportedLanguage = 
-  | 'id' // Indonesian (Bahasa Indonesia)
-  | 'en' // English (UN)
-  | 'ar' // Arabic (UN - العربية)
-  | 'zh' // Chinese (UN - 中文)
-  | 'fr' // French (UN - Français)
-  | 'ru' // Russian (UN - Русский)
-  | 'es' // Spanish (UN - Español)
-  | 'ja' // Japanese (日本語)
-  | 'ko' // Korean (한국어)
-  | 'de' // German (Deutsch)
-  | 'pt'; // Portuguese (Português)
+export type SupportedLanguage = 'hi' | 'en' | 'bn' | 'ta' | 'te' | 'mr' | 'gu' | 'kn' | 'ml' | 'od' | 'pa';
+
+export interface Citation {
+  id: string;
+  chapterKey?: string;
+  chapterTitle: string;
+  page: number;
+  bookCode?: string;
+  text?: string;
+}
+
+export interface ClassroomProposal {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  citations: string[];
+  boardCall?: { name: string; args: Record<string, any> };
+}
 
 export interface VoiceConfig {
   autoStopSeconds: number; // 0 = manual, 5, 10, 15, 20, 30, 60
@@ -153,7 +160,7 @@ export interface ChatMessage {
   telemetryId?: string;
   tokens?: number;
   latencyMs?: number;
-  costIdr?: number;
+  costInr?: number;
   model?: string;
   provider?: string;
 }
@@ -220,6 +227,7 @@ export type LessonPhase =
 
 export interface LessonPlan {
   id: string;
+  chapterKey?: string;
   subject: string;
   topic: string;
   gradeLevel: string;
@@ -262,7 +270,7 @@ export interface TelemetryRecord {
   totalTokens: number;
   thinkingTokens: number;
   costUsd: number;
-  costIdr: number;
+  costInr: number;
   latencyMs: number;
   status: 'success' | 'error';
   errorCode?: string;
@@ -283,7 +291,7 @@ export interface TelemetrySummary {
   totalOutputTokens: number;
   totalTokens: number;
   totalCostUsd: number;
-  totalCostIdr: number;
+  totalCostInr: number;
   avgLatencyMs: number;
   successRate: number;
   providerCounts: Record<string, number>;

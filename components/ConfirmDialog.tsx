@@ -23,7 +23,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   const resolvedConfirm = confirmLabel || t('confirm', 'Konfirmasi');
-  const resolvedCancel = cancelLabel || t('cancel', 'Batal');
+  const resolvedCancel = cancelLabel || t('cancel', 'Cancel');
 
   return (
     <AnimatePresence>

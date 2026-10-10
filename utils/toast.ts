@@ -1,4 +1,6 @@
 // utils/toast.ts — Lightweight event-based toast system (no extra store state)
+import { useStore } from '../store';
+import { localizeWarning } from './warningLanguage';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -13,7 +15,8 @@ type ToastListener = (toast: ToastEvent) => void;
 let listeners: ToastListener[] = [];
 
 const emit = (message: string, type: ToastType, duration: number) => {
-  const event: ToastEvent = { id: `toast_${Date.now()}_${Math.random()}`, message, type, duration };
+  const text = type === 'warning' || type === 'error' ? localizeWarning(message, useStore.getState().warningLanguage) : message;
+  const event: ToastEvent = { id: `toast_${Date.now()}_${Math.random()}`, message: text, type, duration };
   listeners.forEach(l => l(event));
 };
 

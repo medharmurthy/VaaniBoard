@@ -49,7 +49,7 @@ export const attachDebugTools = () => {
     reset: () => {
       useStore.getState().clearLesson();
       useStore.getState().clearQueue();
-      useStore.setState({ messages: [{ role: 'model', text: 'Halo! Papan baru siap.' }] });
+      useStore.setState({ messages: [{ role: 'model', text: 'New board ready.' }] });
       console.log(' State reset untuk test baru');
     },
 

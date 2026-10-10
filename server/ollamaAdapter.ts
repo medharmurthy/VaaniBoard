@@ -195,7 +195,7 @@ function extractToolsAndCleanText(rawText: string): { functionCalls: any[]; clea
     }
 
     if (!cleanText) {
-      cleanText = "Tentu! Saya telah menyiapkan komponen di papan tulis pintar untuk Anda.";
+      cleanText = "The requested components are ready on the board.";
     }
   }
 

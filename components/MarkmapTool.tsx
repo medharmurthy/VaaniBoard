@@ -100,7 +100,7 @@ export const MarkmapTool: React.FC<MarkmapToolProps> = ({ config }) => {
     if (!svgRef.current) return;
     const svgData = new XMLSerializer().serializeToString(svgRef.current);
     downloadFile(svgData, `${slugify(title)}_markmap.svg`, 'image/svg+xml;charset=utf-8');
-    toast.success('Bagan SVG Markmap berhasil diunduh.');
+    toast.success('Bagan SVG Markmap downloaded.');
   };
 
   return (
@@ -135,7 +135,7 @@ export const MarkmapTool: React.FC<MarkmapToolProps> = ({ config }) => {
           <button
             onClick={handleExportSvg}
             className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition"
-            title="Unduh Vektor SVG"
+            title="Download Vektor SVG"
           >
             <Download size={13} />
           </button>

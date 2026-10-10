@@ -23,7 +23,7 @@ export const AppBuilderTool: React.FC<AppBuilderToolProps> = ({ config }) => {
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <script src="https://cdn.tailwindcss.com"></script>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
         <style>
           body { font-family: sans-serif; margin: 0; padding: 0; }
           ${config.css || ''}
@@ -114,7 +114,7 @@ export const AppBuilderTool: React.FC<AppBuilderToolProps> = ({ config }) => {
                   srcDoc={srcDoc}
                   title="App View"
                   className="w-full h-full border-0"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
+                   sandbox="allow-scripts"
                 />
               </div>
             </motion.div>

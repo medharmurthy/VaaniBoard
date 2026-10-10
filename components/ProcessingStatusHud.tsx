@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Sparkles, X, FileText, Cpu, Clock } from 'lucide-react';
 import { useStore } from '../store';
 import { useTranslation } from '../utils/translations';
@@ -39,40 +39,9 @@ export const ProcessingStatusHud: React.FC<ProcessingStatusHudProps> = ({ onCanc
   const activeModel = 
     aiPreference === 'ollama' 
       ? (selectedOllamaModel || 'Ollama (Lokal)') 
-      : (aiPreference === 'vertex' ? (selectedVertexModel || 'Vertex AI') : (selectedGeminiModel || 'gemini-3.8-flash'));
+      : (aiPreference === 'vertex' ? (selectedVertexModel || 'Vertex AI') : (selectedGeminiModel || 'gemini-3.5-flash-lite'));
 
-  // Contextual phase based on elapsed time and attached document
-  const getPhaseText = () => {
-    if (attachedDocument) {
-      if (elapsedSecs < 2.5) {
-        return language === 'en' 
-          ? `Analyzing ${attachedDocument.name} (${(attachedDocument.size / 1024).toFixed(0)} KB)...` 
-          : `Membaca & menganalisis ${attachedDocument.name} (${(attachedDocument.size / 1024).toFixed(0)} KB)...`;
-      }
-      if (elapsedSecs < 5.0) {
-        return language === 'en'
-          ? 'Synthesizing key topics & classroom structure...'
-          : 'Merancang struktur materi & peta konsep...';
-      }
-      return language === 'en'
-        ? 'Generating whiteboard diagrams & responses...'
-        : 'Menyiapkan visualisasi & catatan di kanvas...';
-    }
-
-    if (elapsedSecs < 2.0) {
-      return language === 'en' 
-        ? 'Analyzing pedagogical prompt & instructions...' 
-        : 'Menganalisis instruksi & konteks materi...';
-    }
-    if (elapsedSecs < 4.5) {
-      return language === 'en'
-        ? 'Structuring whiteboard tools & mindmap branches...'
-        : 'Merancang tata letak visual & diagram interaktif...';
-    }
-    return language === 'en'
-      ? 'Finalizing response & drawing to board...'
-      : 'Menyusun penjelasan & menyiapkan papan tulis...';
-  };
+  const getPhaseText = () => language === 'hi' ? 'अनुरोध संसाधित हो रहा है…' : 'Processing classroom request…';
 
   return (
     <motion.div
@@ -92,7 +61,7 @@ export const ProcessingStatusHud: React.FC<ProcessingStatusHudProps> = ({ onCanc
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-[13px] text-[#0a1a3a] tracking-tight truncate">
-                {language === 'en' ? 'Trido AI Processing' : 'Trido Sedang Berpikir'}
+                {language === 'hi' ? 'कक्षा तैयार हो रही है' : 'Vaani classroom processing'}
               </span>
               <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#1550aa] border border-blue-200/60 truncate">
                 {activeModel}
@@ -111,10 +80,10 @@ export const ProcessingStatusHud: React.FC<ProcessingStatusHudProps> = ({ onCanc
             type="button"
             onClick={onCancel}
             className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold transition-all cursor-pointer active:scale-95"
-            title="Batalkan Tugas AI"
+            title="Cancel request"
           >
             <X size={13} strokeWidth={2.5} />
-            <span className="hidden sm:inline">{language === 'en' ? 'Cancel' : 'Batal'}</span>
+            <span className="hidden sm:inline">{language === 'hi' ? 'रद्द करें' : 'Cancel'}</span>
           </button>
         </div>
       </div>

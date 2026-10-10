@@ -9,6 +9,8 @@ import { toast } from '../utils/toast';
 import { submitLogFeedback } from '../services/aiService';
 import { useStore } from '../store';
 import gsap from 'gsap';
+import { speakText, stopSpeaking } from '../services/speechService';
+import {normalizeMathMarkdown} from '../utils/mathMarkdown';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -119,10 +121,10 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     try {
       await navigator.clipboard.writeText(fullText);
       setCopied(true);
-      toast.success('Pesan disalin ke clipboard');
+      toast.success('Message copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error('Gagal menyalin pesan');
+      toast.error('Could not copy the message');
     }
   };
 
@@ -138,10 +140,10 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
       useStore.getState().updateDomElement(id, {
         id,
-        html: '<div>Catatan AI</div>',
+        html: '<div>AI Note</div>',
         componentType: 'DOCUMENT_PAGE',
         config: {
-          title: `📌 Catatan AI: ${titleSnippet || 'Penjelasan Ringkas'}`,
+          title: `📌 AI Note: ${titleSnippet || 'Quick Explanation'}`,
           markdown: fullText,
           model: displayModel
         },
@@ -158,25 +160,19 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
       const event = new CustomEvent('addCanvasPlaceholder', { detail: { id, x: centerX, y: centerY, width: 520, height: 420 } });
       window.dispatchEvent(event);
 
-      toast.success('📌 Respons AI berhasil ditempel ke papan tulis!');
+      toast.success('📌 AI response pinned to the whiteboard!');
     } catch {
-      toast.error('Gagal menempel respons ke papan');
+      toast.error('Could not pin the response to the board');
     }
   };
 
-  const handleSpeakToggle = () => {
-    if (!('speechSynthesis' in window)) {
-      toast.error('Fitur Text-to-Speech tidak didukung di browser ini.');
-      return;
-    }
-
+  const handleSpeakToggle = async () => {
     if (isSpeaking) {
-      window.speechSynthesis.cancel();
+      stopSpeaking();
       setIsSpeaking(false);
       return;
     }
-
-    window.speechSynthesis.cancel();
+    stopSpeaking();
     // Clean markdown symbols for cleaner TTS voice
     const cleanText = fullText
       .replace(/[*#`_~\[\]]/g, '')
@@ -185,27 +181,17 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
     if (!cleanText) return;
 
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'id-ID';
-    utterance.rate = 1.05;
-
-    // Pick Indonesian voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const idVoice = voices.find(v => v.lang.startsWith('id'));
-    if (idVoice) utterance.voice = idVoice;
-
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
     setIsSpeaking(true);
+    try { await speakText(cleanText, useStore.getState().language); }
+    catch (error) { toast.warning(error instanceof Error ? error.message : 'Speech unavailable. Read the text on screen.'); }
+    finally { setIsSpeaking(false); }
   };
 
   if (!isModel) {
     return (
       <div ref={containerRef} className="flex flex-col items-end group w-full will-change-transform">
         <div className="flex items-center gap-1.5 mb-1 mr-1">
-          <span className="text-[11px] font-semibold text-slate-400">Anda</span>
+          <span className="text-[11px] font-semibold text-slate-400">You</span>
           <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
             <User size={12} />
           </div>
@@ -222,9 +208,9 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
       <div className="flex items-center justify-between w-full mb-1 ml-1 px-1">
         <div className="flex items-center gap-1.5">
           <div className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center p-0.5 shadow-2xs">
-            <img src="/logo.png" alt="Trido" className="w-3.5 h-3.5 object-contain" />
+            <img src="/logo.png" alt="Vaani Board" className="w-3.5 h-3.5 object-contain" />
           </div>
-          <span className="text-[11px] font-bold text-slate-700">Trido Assistant</span>
+          <span className="text-[11px] font-bold text-slate-700">Vaani Board Assistant</span>
           {message.tokens && (
             <span className="text-[10px] font-mono text-slate-400 flex items-center gap-0.5" title={`Model: ${displayModel}`}>
               <Zap size={10} className="text-amber-500" /> {message.tokens} tok
@@ -248,12 +234,12 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   e.stopPropagation();
                   setRated('good');
                   await submitLogFeedback(message.telemetryId!, 'good');
-                  toast.success('Feedback positif dicatat ke Google Cloud / Sheets!');
+                  toast.success('Positive feedback recorded to Google Cloud / Sheets!');
                 }}
                 className={`p-1 rounded-lg transition-colors ${
                   rated === 'good' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-400 hover:text-emerald-600 hover:bg-slate-100'
                 }`}
-                title="Puas / Bagus (Kirim ke Telemetri)"
+                title="Good answer (send to telemetry)"
               >
                 <ThumbsUp size={12} />
               </button>
@@ -263,12 +249,12 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                   e.stopPropagation();
                   setRated('bad');
                   await submitLogFeedback(message.telemetryId!, 'bad');
-                  toast.success('Feedback dicatat untuk perbaikan.');
+                  toast.success('Feedback recorded so we can improve.');
                 }}
                 className={`p-1 rounded-lg transition-colors ${
                   rated === 'bad' ? 'bg-rose-100 text-rose-700' : 'text-slate-400 hover:text-rose-600 hover:bg-slate-100'
                 }`}
-                title="Kurang / Butuh perbaikan (Kirim ke Telemetri)"
+                title="Needs improvement (send to telemetry)"
               >
                 <ThumbsDown size={12} />
               </button>
@@ -280,7 +266,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               e.stopPropagation();
               handleSpeakToggle();
             }}
-            title={isSpeaking ? "Hentikan Suara" : "Baca Suara (TTS)"}
+            title={isSpeaking ? "Stop speaking" : "Read aloud"}
             className={`p-1 rounded-lg transition-colors ${isSpeaking ? 'bg-blue-100 text-blue-600' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
           >
             {isSpeaking ? <VolumeX size={13} /> : <Volume2 size={13} />}
@@ -291,7 +277,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               e.stopPropagation();
               handleCopy();
             }}
-            title="Salin Markdown"
+            title="Copy Markdown"
             className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
           >
             {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} />}
@@ -304,11 +290,11 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               e.stopPropagation();
               handlePinToBoard();
             }}
-            title="Tempelkan Respons AI ini langsung ke Papan Tulis (Pin to Canvas)"
+            title="Pin this AI response straight to the whiteboard"
             className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#1550aa]/10 hover:bg-[#1550aa] text-[#1550aa] hover:text-white transition-all cursor-pointer"
           >
             <Pin size={11} className="rotate-45" />
-            <span className="hidden sm:inline">Tempel ke Papan</span>
+            <span className="hidden sm:inline">Pin to board</span>
           </button>
         </div>
       </div>
@@ -380,11 +366,11 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
                         onClick={(e) => {
                           e.stopPropagation();
                           navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
-                          toast.success('Kode disalin!');
+                          toast.success('Code copied!');
                         }}
                         className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer px-1.5 py-0.5 rounded bg-slate-700/60 hover:bg-slate-700 text-[10px]"
                       >
-                        <Copy size={11} /> Salin
+                        <Copy size={11} /> Copy
                       </button>
                     </div>
                     <pre className="p-3.5 overflow-x-auto text-xs font-mono text-indigo-200 leading-relaxed">
@@ -403,7 +389,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               )
             }}
           >
-            {displayedText || (isStreaming ? '▋' : '*Pesan kosong*')}
+            {normalizeMathMarkdown(displayedText) || (isStreaming ? '▋' : '*Empty message*')}
           </ReactMarkdown>
           {isStreaming && (
             <span className="inline-block w-2 h-4 ml-0.5 bg-blue-600 rounded-xs animate-pulse align-middle" />

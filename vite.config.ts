@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
           manifest: {
-            name: 'Trido++ Digital Classroom',
-            short_name: 'Trido++',
+            name: 'Vaani Board — Indian Classroom',
+            short_name: 'Vaani Board',
             description: 'AI-Powered Digital Classroom for Local & Cloud Learning',
             theme_color: '#2563eb',
             icons: [
@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
             clientsClaim: true,
             cleanupOutdatedCaches: true,
             maximumFileSizeToCacheInBytes: 7 * 1024 * 1024,
-            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,ttf}'],
             runtimeCaching: [
               {
                 urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

@@ -5,6 +5,8 @@
 > **Target repo:** `github.com/medharmurthy/Cline-AI-Hackathon`
 > **Working product name:** **Vaani Board** (वाणी = "voice/speech"). Rename freely; nothing in the plan depends on the name.
 
+> **Scope update (10 Oct 2026):** User-approved model billing is now **Cline account credits**, with `CLINE_PROVIDER=cline` and `CLINE_MODEL=google/gemini-3.5-flash-lite`. Live lesson and browser mind-map generation pass through Cline's gateway, bypassing depleted direct Google AI Studio credits. Direct providers remain explicit alternatives. Speech input/output is **Sarvam only** (`saaras:v4` / `bulbul:v3`); browser speech, Whisper and Bhashini are not active product providers. The picker uses Bulbul's 11 supported languages, excluding Assamese and Urdu. Earlier direct-Google/Assamese/alternative-speech examples below are historical proposals, superseded by this update. Credentials live only in ignored `.env`; Cline credentials are server-only.
+
 ---
 
 ## 0. TL;DR

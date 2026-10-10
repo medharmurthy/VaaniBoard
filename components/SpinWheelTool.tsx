@@ -11,14 +11,14 @@ interface SpinWheelProps {
 }
 
 const DEFAULT_ITEMS = [
-  'Budi Santoso',
-  'Siti Aminah',
-  'Andi Pratama',
-  'Dewi Lestari',
-  'Yoga Permana',
-  'Rina Kusuma',
-  'Fajar Nugraha',
-  'Nadia Putri'
+  'Student 1',
+  'Student 2',
+  'Student 3',
+  'Student 4',
+  'Student 5',
+  'Student 6',
+  'Student 7',
+  'Student 8'
 ];
 
 const COLORS = [
@@ -37,7 +37,7 @@ export const SpinWheelTool: React.FC<SpinWheelProps> = ({ config }) => {
   const velocityRef = useRef(0);
   const animFrameRef = useRef<number | null>(null);
 
-  const title = config?.title || 'Roda Acak Siswa';
+  const title = config?.title || 'Random student picker';
 
   // Play subtle ticking sound using Web Audio API
   const playTick = () => {
@@ -196,7 +196,7 @@ export const SpinWheelTool: React.FC<SpinWheelProps> = ({ config }) => {
           <div className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
           <span className="font-extrabold text-slate-800 text-sm tracking-tight">{title}</span>
           <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded-full">
-            {items.length} Opsi
+            {items.length} options
           </span>
         </div>
 
@@ -205,7 +205,7 @@ export const SpinWheelTool: React.FC<SpinWheelProps> = ({ config }) => {
           disabled={isSpinning || items.length === 0}
           className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
         >
-          <Play size={13} fill="currentColor" /> {isSpinning ? 'Memutar...' : 'Putar Roda'}
+          <Play size={13} fill="currentColor" /> {isSpinning ? 'Spinning...' : 'Spin wheel'}
         </button>
       </div>
 
@@ -226,7 +226,7 @@ export const SpinWheelTool: React.FC<SpinWheelProps> = ({ config }) => {
                 <Trophy size={18} />
               </div>
               <div>
-                <div className="text-[10px] font-black uppercase tracking-wider text-amber-600">Siswa / Opsi Terpilih</div>
+                <div className="text-[10px] font-black uppercase tracking-wider text-amber-600">Selected student / option</div>
                 <div className="text-base font-black text-slate-900">{winner}</div>
               </div>
             </div>
@@ -244,7 +244,7 @@ export const SpinWheelTool: React.FC<SpinWheelProps> = ({ config }) => {
       <div className="p-2.5 bg-white border-t border-slate-200/80 flex items-center gap-2 shrink-0">
         <input
           type="text"
-          placeholder="Tambah nama..."
+          placeholder="Add a name..."
           value={newItemName}
           onChange={e => setNewItemName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && addItem()}

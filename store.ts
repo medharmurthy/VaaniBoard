@@ -4,9 +4,11 @@ import { CONFIG } from './constants';
 import { AgentState, AgentAction, Point, ChatMessage, DomElementState, CreatorTool, FontFamily, BoardSession, PageState, AiPreference, LessonPlan, MindmapNodeRecord, LessonPhase, LessonStep, TranscribeMode, VoiceConfig, AttachedDocument, ExperimentalConfig, SupportedLanguage, SmartboardLayoutMode } from './types';
 import { saveSessionToDb, getSessionFromDb, deleteSessionFromDb, getAllSessionsFromDb } from './services/db';
 import { findMatchingMindmapNode } from './utils/mindmapLayout';
+import type { Citation, ClassroomProposal } from './types';
 
 interface AppStore extends AgentState {
   actionQueue: AgentAction[];
+  taskGeneration: number;
   messages: ChatMessage[];
   zoom: number;
   viewportTransform: number[];
@@ -17,46 +19,46 @@ interface AppStore extends AgentState {
   theme: 'dark' | 'light';
   smartboardLayoutMode: SmartboardLayoutMode;
   setSmartboardLayoutMode: (mode: SmartboardLayoutMode) => void;
-  
+
   // App UI State
   isAiDrawerOpen: boolean;
   toggleAiDrawer: () => void;
-  
+
   isTimerOpen: boolean;
   toggleTimer: () => void;
-  
+
   isCalculatorOpen: boolean;
   toggleCalculator: () => void;
-  
+
   isNotesOpen: boolean;
   toggleNotes: () => void;
-  
+
   isQuizOpen: boolean;
   toggleQuiz: () => void;
 
   isUnitConverterOpen: boolean;
   toggleUnitConverter: () => void;
-  
+
   isPeriodicTableOpen: boolean;
   togglePeriodicTable: () => void;
-  
+
   isAttendanceOpen: boolean;
   toggleAttendance: () => void;
-  
+
   isTodoListOpen: boolean;
   toggleTodoList: () => void;
-  
+
   toggleSpinWheel: () => void;
   toggleScoreboard: () => void;
   toggleMathGraph: () => void;
-  
+
   isAssistiveMode: boolean;
   toggleAssistiveMode: (enabled?: boolean) => void;
   isHandsFreeListening: boolean;
   setHandsFreeListening: (active: boolean) => void;
   lastVoiceCommand: string | null;
   setLastVoiceCommand: (cmd: string | null) => void;
-  
+
   isBoardSettingsOpen: boolean;
   toggleBoardSettings: () => void;
 
@@ -68,6 +70,23 @@ interface AppStore extends AgentState {
 
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => void;
+  warningLanguage: SupportedLanguage;
+  setWarningLanguage: (lang: SupportedLanguage) => void;
+  boardLanguage: SupportedLanguage;
+  setBoardLanguage: (lang: SupportedLanguage) => void;
+  activeChapter: string | null;
+  setActiveChapter: (key: string | null) => void;
+  lessonMode: 'standard' | 'nipun';
+  setLessonMode: (mode: 'standard' | 'nipun') => void;
+  proposals: ClassroomProposal[];
+  setProposals: (proposals: ClassroomProposal[]) => void;
+  dismissProposal: (id: string) => void;
+  citations: Citation[];
+  setCitations: (citations: Citation[]) => void;
+  highContrast: boolean;
+  setHighContrast: (enabled: boolean) => void;
+  classroomEngine: string;
+  setClassroomEngine: (engine: string) => void;
 
   aiPreference: AiPreference;
   setAiPreference: (pref: AiPreference) => void;
@@ -86,10 +105,10 @@ interface AppStore extends AgentState {
 
   selectedVertexModel: string;
   setSelectedVertexModel: (model: string) => void;
-  
+
   isViewerUrl: boolean;
   setIsViewerUrl: (v: boolean) => void;
-  
+
   // Voice & Text Input
   inputMode: 'voice' | 'text';
   transcribeMode: TranscribeMode;
@@ -102,7 +121,7 @@ interface AppStore extends AgentState {
   setChatInputText: (txt: string) => void;
   interimInputText: string;
   setInterimInputText: (txt: string) => void;
-  
+
   // Creator Mode State
   isCreatorMode: boolean;
   activeTool: CreatorTool;
@@ -111,7 +130,7 @@ interface AppStore extends AgentState {
   brushWidth: number;
   fontFamily: FontFamily;
   fontSize: number;
-  
+
   // Actions
   setInputMode: (mode: 'voice' | 'text') => void;
   setShapeFilled: (filled: boolean) => void;
@@ -127,13 +146,13 @@ interface AppStore extends AgentState {
   setAgentMessage: (msg: string | null) => void;
   setLastUploadedImage: (img: string | null) => void;
   toggleTheme: () => void;
-  
+
   // Creator Actions
   toggleCreatorMode: () => void;
   setActiveTool: (tool: CreatorTool) => void;
   setBrushColor: (color: string) => void;
   setBrushWidth: (width: number) => void;
-  
+
   // Pages
   pages: PageState[];
   currentPageIndex: number;
@@ -141,7 +160,7 @@ interface AppStore extends AgentState {
   switchPage: (index: number) => void;
   updatePageData: (index: number, canvasData: object, domData: Record<string, DomElementState>, previewDataUrl?: string, mindmapNodes?: MindmapNodeRecord[]) => void;
   removePage: (index: number) => void;
-  
+
   addAction: (action: AgentAction) => void;
   addMessage: (msg: ChatMessage) => void;
   clearMessages: () => void;
@@ -152,7 +171,7 @@ interface AppStore extends AgentState {
   currentTaskAbortController: AbortController | null;
   setTaskAbortController: (controller: AbortController | null) => void;
   setViewport: (zoom: number, transform: number[]) => void;
-  
+
   // DOM Element Management
   updateDomElement: (id: string, state: Partial<DomElementState>) => void;
   removeDomElement: (id: string) => void;
@@ -161,11 +180,14 @@ interface AppStore extends AgentState {
   undoCanvas: () => void;
   redoCanvas: () => void;
   setUndoRedoFunctions: (undo: () => void, redo: () => void) => void;
+  beginAiTransaction: (label?: string) => void;
+  commitAiTransaction: () => void;
+  setHistoryTransactionFunctions: (begin: (label?: string) => void, commit: () => void) => void;
 
   currentSessionId: string | null;
   sessionLoadTimestamp: number;
   sessions: BoardSession[];
-  
+
   loadSessions: () => Promise<void>;
   saveCurrentSession: (title?: string) => Promise<void>;
   createNewSession: () => void;
@@ -176,13 +198,13 @@ interface AppStore extends AgentState {
   // ── Lesson Engine ──────────────────────────────────────────────────────
   lessonPlan: LessonPlan | null;
   activeMindmapNodes: MindmapNodeRecord[];
-  
+
   // Lesson Actions
   startLesson: (subject: string, topic: string, gradeLevel: string) => void;
   advanceLessonPhase: () => void;
   completeLessonStep: (stepId: string, objectIds: string[]) => void;
   clearLesson: () => void;
-  
+
   // Mindmap tracking
   registerMindmapNode: (node: MindmapNodeRecord) => void;
   clearMindmapNodes: () => void;
@@ -193,9 +215,15 @@ let autoSaveTimeout: ReturnType<typeof setTimeout>;
 
 const getInitialAiPreference = (): AiPreference => {
   const saved = localStorage.getItem('ai_preference');
-  return (saved === 'gemini' || saved === 'ollama' || saved === 'vertex' || saved === 'auto') 
-    ? (saved as AiPreference) 
-    : 'vertex';
+  // One-time migration lets the server's new billing provider replace a legacy
+  // Gemini selection. Later explicit selections (including local-only) are preserved.
+  if (!localStorage.getItem('vaani_provider_routing_v2')) {
+    localStorage.setItem('vaani_provider_routing_v2', '1');
+    if (saved === 'gemini') { localStorage.setItem('ai_preference', 'auto'); return 'auto'; }
+  }
+  return (saved === 'cline' || saved === 'gemini' || saved === 'ollama' || saved === 'vertex' || saved === 'sarvam' || saved === 'auto')
+    ? (saved as AiPreference)
+    : 'auto';
 };
 
 const getInitialGeminiApiKey = (): string => {
@@ -207,45 +235,40 @@ const getInitialOllamaBaseUrl = (): string => {
 };
 
 const getInitialSelectedGeminiModel = (): string => {
-  if (typeof window === 'undefined') return 'gemini-3.8-flash';
+  if (typeof window === 'undefined') return CONFIG.ai.gemini.model;
   const saved = localStorage.getItem('selected_gemini_model');
-  if (!saved || saved === 'gemini-3.7-flash') return 'gemini-3.8-flash';
+  if (!saved || saved === 'gemini-3.7-flash' || saved === 'gemini-3.8-flash') return CONFIG.ai.gemini.model;
   return saved;
 };
 
 const getInitialSelectedOllamaModel = (): string => {
-  if (typeof window === 'undefined') return 'trido-model:latest';
-  const saved = localStorage.getItem('selected_ollama_model');
-  if (!saved || saved === 'gemma:2b' || saved === 'gemma2:2b' || saved === 'gemma4:e2b' || saved === 'qwen2.5:7b') {
-    return 'trido-model:latest';
-  }
-  return saved;
+  if (typeof window === 'undefined') return CONFIG.ai.ollama.model;
+  return localStorage.getItem('selected_ollama_model') || CONFIG.ai.ollama.model;
 };
 
 const getInitialSelectedVertexModel = (): string => {
-  if (typeof window === 'undefined') return 'gemini-3.8-flash';
+  if (typeof window === 'undefined') return CONFIG.ai.vertex.model;
   const saved = localStorage.getItem('selected_vertex_model');
-  if (!saved || saved === 'gemini-3.7-flash') return 'gemini-3.8-flash';
+  if (!saved || saved === 'gemini-3.7-flash' || saved === 'gemini-3.8-flash') return CONFIG.ai.vertex.model;
   return saved;
 };
 
 const getInitialLanguage = (): SupportedLanguage => {
-  if (typeof window === 'undefined') return 'id';
-  const saved = localStorage.getItem('trido_language') as SupportedLanguage;
-  const validLanguages: SupportedLanguage[] = ['id', 'en', 'ar', 'zh', 'fr', 'ru', 'es', 'ja', 'ko', 'de', 'pt'];
-  return (saved && validLanguages.includes(saved)) ? saved : 'id';
+  if (typeof window === 'undefined') return 'hi';
+  const saved = localStorage.getItem('vaani_language') || localStorage.getItem('trido_language');
+  const validLanguages = ['hi', 'en', 'bn', 'ta', 'te', 'mr', 'gu', 'kn', 'ml', 'od', 'pa'];
+  return validLanguages.includes(saved) ? saved as SupportedLanguage : 'hi';
 };
 
 const getInitialUserName = (): string => {
-  if (typeof window === 'undefined') return 'Guru';
-  return localStorage.getItem('trido_user_name') || 'Guru';
+  if (typeof window === 'undefined') return 'Teacher';
+  return localStorage.getItem('trido_user_name') || 'Teacher';
 };
 
 const getInitialTranscribeMode = (): TranscribeMode => {
-  if (typeof window === 'undefined') return 'faster_whisper';
+  if (typeof window === 'undefined') return 'sarvam';
   const saved = localStorage.getItem('trido_transcribe_mode') as TranscribeMode;
-  if (saved === 'faster_whisper' || saved === 'record_gemini' || saved === 'gemini_live' || saved === 'upload_audio' || saved === 'webspeech') return saved;
-  return 'faster_whisper';
+  return saved === 'upload_audio' ? 'upload_audio' : 'sarvam';
 };
 
 const defaultVoiceConfig: VoiceConfig = {
@@ -255,7 +278,7 @@ const defaultVoiceConfig: VoiceConfig = {
   echoCancellation: true,
   autoGainControl: true,
   audioQuality: 'high',
-  language: 'id-ID',
+  language: 'hi-IN',
   silenceDetectionTimeout: 2.5
 };
 
@@ -265,7 +288,7 @@ const getInitialVoiceConfig = (): VoiceConfig => {
     if (saved) {
       const parsed = JSON.parse(saved);
       // Hard enforce continuous manual recording (0) - eliminate legacy 10s cutoff
-      return { ...defaultVoiceConfig, ...parsed, autoStopSeconds: 0 };
+      return { ...defaultVoiceConfig, ...parsed, language: `${getInitialLanguage()}-IN`, autoStopSeconds: 0 };
     }
   } catch {}
   return defaultVoiceConfig;
@@ -297,28 +320,28 @@ const getInitialExperimentalConfig = (): ExperimentalConfig => {
 // ============================================================================
 const estimateSessionSize = (pages: AppStore['pages']): number => {
   let bytes = 0;
-  
+
   for (const page of pages) {
     // Canvas objects estimation
     const canvasObj = page.canvas as any;
     if (canvasObj && canvasObj.objects) {
       bytes += canvasObj.objects.length * 180; // avg 180 bytes/object
     }
-    
+
     // DOM elements estimation
     if (page.dom) {
       bytes += Object.keys(page.dom).length * 420;
     }
-    
+
     // Preview image (base64 overhead ~33%)
     if (page.previewDataUrl) {
       bytes += page.previewDataUrl.length * 0.75;
     }
-    
+
     // Viewport transform (negligible)
     bytes += 48;
   }
-  
+
   return Math.max(bytes, 512); // Minimum 512 bytes
 };
 
@@ -326,12 +349,12 @@ export const useStore = create<AppStore>((set, get) => ({
   currentSessionId: null,
   sessionLoadTimestamp: 0,
   sessions: [],
-  
+
   loadSessions: async () => {
     const sessions = await getAllSessionsFromDb();
     set({ sessions });
   },
-  
+
   saveCurrentSession: async (title) => {
     // Snapshot current active canvas state if running in browser
     if (typeof window !== 'undefined' && typeof (window as any).__snapshotCanvas === 'function') {
@@ -345,15 +368,15 @@ export const useStore = create<AppStore>((set, get) => ({
     const { currentSessionId, pages, domElements, sessions, messages, lessonPlan } = get();
     const id = currentSessionId || Date.now().toString();
     const now = Date.now();
-    
+
     // Attempt to get a title
     let sessionTitle = title;
     if (!sessionTitle) {
       if (currentSessionId) {
         const existing = sessions.find(s => s.id === currentSessionId);
-        sessionTitle = existing?.title || 'Papan Tanpa Judul';
+        sessionTitle = existing?.title || 'Untitled board';
       } else {
-        sessionTitle = 'Papan Tanpa Judul';
+        sessionTitle = 'Untitled board';
       }
     }
 
@@ -368,24 +391,24 @@ export const useStore = create<AppStore>((set, get) => ({
       messages: messages,
       lessonPlan: lessonPlan
     };
-    
+
     await saveSessionToDb(session);
     set({ currentSessionId: id });
     await get().loadSessions();
   },
-  
+
   createNewSession: () => {
     set({
       currentSessionId: null,
       pages: [{ canvas: {}, dom: {}, previewDataUrl: '', mindmapNodes: [] }],
       currentPageIndex: 0,
       domElements: {},
-      messages: [{ role: 'model', text: 'Halo! Papan tulis baru telah disiapkan.' }],
+      messages: [{ role: 'model', text: 'A new whiteboard is ready.' }],
       lessonPlan: null,
       activeMindmapNodes: []
     });
   },
-  
+
   loadSessionData: async (id) => {
     const session = await getSessionFromDb(id);
     if (session) {
@@ -399,13 +422,13 @@ export const useStore = create<AppStore>((set, get) => ({
         isHistoryOpen: false,
         lessonPlan: session.lessonPlan || null,
         activeMindmapNodes: initialPage?.mindmapNodes || [],
-        messages: session.messages && session.messages.length > 0 
-          ? session.messages 
-          : [{ role: 'model', text: `Memuat sesi "${session.title}". Ada yang bisa saya bantu?` }]
+        messages: session.messages && session.messages.length > 0
+          ? session.messages
+          : [{ role: 'model', text: `Loaded session "${session.title}". What would you like to teach?` }]
       });
     }
   },
-  
+
   deleteSession: async (id) => {
     await deleteSessionFromDb(id);
     await get().loadSessions();
@@ -460,10 +483,10 @@ export const useStore = create<AppStore>((set, get) => ({
         lessonPlan: data.lessonPlan || null,
         messages: Array.isArray(data.messages) && data.messages.length > 0
           ? data.messages
-          : [{ role: 'model', text: 'Sesi papan berhasil diimpor.' }]
+          : [{ role: 'model', text: 'Board session imported.' }]
       });
 
-      const title = data.title || `Papan Impor ${new Date().toLocaleDateString('id-ID')}`;
+      const title = data.title || `Imported board ${new Date().toLocaleDateString('en-IN')}`;
       await get().saveCurrentSession(title);
       return true;
     } catch (err) {
@@ -493,12 +516,12 @@ export const useStore = create<AppStore>((set, get) => ({
   advanceLessonPhase: () => {
     const { lessonPlan } = get();
     if (!lessonPlan) return;
-    
+
     const phases: LessonPhase[] = ['planning', 'intro', 'core', 'practice', 'closing'];
     const currentIdx = phases.indexOf(lessonPlan.phase);
     const nextPhase = phases[currentIdx + 1] || 'closing';
-    
-    set({ 
+
+    set({
       lessonPlan: { ...lessonPlan, phase: nextPhase }
     });
   },
@@ -506,13 +529,13 @@ export const useStore = create<AppStore>((set, get) => ({
   completeLessonStep: (stepId, objectIds) => {
     const { lessonPlan } = get();
     if (!lessonPlan) return;
-    
+
     const updatedSteps = lessonPlan.plannedSteps.map(step =>
-      step.id === stepId 
+      step.id === stepId
         ? { ...step, status: 'created' as const, canvasObjectIds: objectIds }
         : step
     );
-    
+
     set({
       lessonPlan: {
         ...lessonPlan,
@@ -522,9 +545,9 @@ export const useStore = create<AppStore>((set, get) => ({
     });
   },
 
-  clearLesson: () => set({ 
-    lessonPlan: null, 
-    activeMindmapNodes: [] 
+  clearLesson: () => set({
+    lessonPlan: null,
+    activeMindmapNodes: []
   }),
 
   // Mindmap node registry
@@ -569,7 +592,8 @@ export const useStore = create<AppStore>((set, get) => ({
   currentAction: null,
   agentMessage: null,
   actionQueue: [],
-  messages: [{ role: 'model', text: 'Halo! Saya Trido AI. Ada yang bisa dibantu?' }],
+  taskGeneration: 0,
+  messages: [{ role: 'model', text: 'नमस्ते! मैं Vaani Board हूँ। बोलकर या लिखकर कक्षा शुरू करें।' }],
   logs: [],
   inputMode: 'voice',
   transcribeMode: getInitialTranscribeMode(),
@@ -606,41 +630,41 @@ export const useStore = create<AppStore>((set, get) => ({
     }
     set({ smartboardLayoutMode: mode });
   },
-  
+
   isAiDrawerOpen: false,
   toggleAiDrawer: () => set((state) => ({ isAiDrawerOpen: !state.isAiDrawerOpen })),
-  
+
   isTimerOpen: false,
   toggleTimer: () => set((state) => ({ isTimerOpen: !state.isTimerOpen })),
-  
+
   isCalculatorOpen: false,
   toggleCalculator: () => set((state) => ({ isCalculatorOpen: !state.isCalculatorOpen })),
-  
+
   isNotesOpen: false,
   toggleNotes: () => set((state) => ({ isNotesOpen: !state.isNotesOpen })),
-  
+
   isQuizOpen: false,
   toggleQuiz: () => set((state) => ({ isQuizOpen: !state.isQuizOpen })),
-  
+
   isUnitConverterOpen: false,
   toggleUnitConverter: () => set((state) => ({ isUnitConverterOpen: !state.isUnitConverterOpen })),
-  
+
   isPeriodicTableOpen: false,
   togglePeriodicTable: () => set((state) => ({ isPeriodicTableOpen: !state.isPeriodicTableOpen })),
-  
+
   isAttendanceOpen: false,
   toggleAttendance: () => set((state) => ({ isAttendanceOpen: !state.isAttendanceOpen })),
-  
+
   isTodoListOpen: false,
   toggleTodoList: () => set((state) => ({ isTodoListOpen: !state.isTodoListOpen })),
-  
+
   toggleSpinWheel: () => {
     const id = `wheel_${Date.now()}`;
     get().updateDomElement(id, {
       id,
       html: '<div>Roda</div>',
       componentType: 'SPIN_WHEEL',
-      config: { title: 'Roda Acak Siswa' },
+      config: { title: 'Random student picker' },
       x: 960,
       y: 540,
       width: 440,
@@ -656,9 +680,9 @@ export const useStore = create<AppStore>((set, get) => ({
     const id = `score_${Date.now()}`;
     get().updateDomElement(id, {
       id,
-      html: '<div>Skor</div>',
+      html: '<div>Score</div>',
       componentType: 'SCOREBOARD',
-      config: { title: 'Papan Skor Kelompok' },
+      config: { title: 'Team scoreboard' },
       x: 960,
       y: 540,
       width: 420,
@@ -687,7 +711,7 @@ export const useStore = create<AppStore>((set, get) => ({
       zIndex: 10
     });
   },
-  
+
   isAssistiveMode: typeof window !== 'undefined' && localStorage.getItem('trido_assistive_mode') === 'true',
   toggleAssistiveMode: (enabled) => set((state) => {
     const nextVal = enabled !== undefined ? enabled : !state.isAssistiveMode;
@@ -698,25 +722,42 @@ export const useStore = create<AppStore>((set, get) => ({
   setHandsFreeListening: (active) => set({ isHandsFreeListening: active }),
   lastVoiceCommand: null,
   setLastVoiceCommand: (cmd) => set({ lastVoiceCommand: cmd }),
-  
+
   isBoardSettingsOpen: false,
   toggleBoardSettings: () => set((state) => ({ isBoardSettingsOpen: !state.isBoardSettingsOpen })),
 
   isHistoryOpen: false,
   toggleHistory: () => set((state) => ({ isHistoryOpen: !state.isHistoryOpen })),
-  
+
   userName: getInitialUserName(),
   setUserName: (name) => {
-    const trimmed = name.trim() || 'Guru';
+    const trimmed = name.trim() || 'Teacher';
     localStorage.setItem('trido_user_name', trimmed);
     set({ userName: trimmed });
   },
 
   language: getInitialLanguage(),
+  warningLanguage: getInitialLanguage(),
+  setWarningLanguage: (lang) => set({ warningLanguage: lang }),
   setLanguage: (lang) => {
-    localStorage.setItem('trido_language', lang);
-    set({ language: lang });
+    localStorage.setItem('vaani_language', lang);
+    set({ language: lang, warningLanguage: lang });
   },
+  boardLanguage: getInitialLanguage(),
+  setBoardLanguage: (lang) => set({ boardLanguage: lang }),
+  activeChapter: null,
+  setActiveChapter: (key) => set({ activeChapter: key }),
+  lessonMode: 'standard',
+  setLessonMode: (mode) => set({ lessonMode: mode }),
+  proposals: [],
+  setProposals: (proposals) => set({ proposals }),
+  dismissProposal: (id) => set(state => ({ proposals: state.proposals.filter(p => p.id !== id) })),
+  citations: [],
+  setCitations: (citations) => set({ citations }),
+  highContrast: false,
+  setHighContrast: (enabled) => set({ highContrast: enabled }),
+  classroomEngine: 'Ready',
+  setClassroomEngine: (engine) => set({ classroomEngine: engine }),
 
   aiPreference: getInitialAiPreference(),
   setAiPreference: (pref) => {
@@ -757,12 +798,12 @@ export const useStore = create<AppStore>((set, get) => ({
   isViewerUrl: false,
 
   setIsViewerUrl: (v) => set({ isViewerUrl: v }),
-  
+
   chatInputText: '',
   setChatInputText: (txt: string) => set({ chatInputText: txt }),
   interimInputText: '',
   setInterimInputText: (txt: string) => set({ interimInputText: txt }),
-  
+
   // Creator Defaults
   isCreatorMode: false,
   activeTool: 'SELECT',
@@ -771,10 +812,10 @@ export const useStore = create<AppStore>((set, get) => ({
   brushWidth: 3,
   fontFamily: 'Inter',
   fontSize: 24,
-  
+
   pages: [{ canvas: {}, dom: {}, previewDataUrl: '', mindmapNodes: [] }],
   currentPageIndex: 0,
-  
+
   addPage: (emptyState, previewDataUrl) => set((state) => {
     const newPages = [...state.pages, { canvas: emptyState || {}, dom: {}, previewDataUrl: previewDataUrl || '', mindmapNodes: [] }];
     return { pages: newPages, currentPageIndex: newPages.length - 1, activeMindmapNodes: [] };
@@ -782,7 +823,7 @@ export const useStore = create<AppStore>((set, get) => ({
   switchPage: (index) => set((state) => {
     if (index >= 0 && index < state.pages.length) {
       const targetPage = state.pages[index];
-      return { 
+      return {
         currentPageIndex: index,
         activeMindmapNodes: targetPage?.mindmapNodes || []
       };
@@ -793,13 +834,13 @@ export const useStore = create<AppStore>((set, get) => ({
     const newPages = [...state.pages];
     const oldUrl = newPages[index]?.previewDataUrl;
     const currentNodes = mindmapNodes !== undefined ? mindmapNodes : (newPages[index]?.mindmapNodes || state.activeMindmapNodes);
-    newPages[index] = { 
-      canvas: canvasData, 
-      dom: domData, 
+    newPages[index] = {
+      canvas: canvasData,
+      dom: domData,
       previewDataUrl: previewDataUrl !== undefined ? previewDataUrl : oldUrl,
       mindmapNodes: currentNodes
     };
-    
+
     // Auto-save logic
     if (state.currentSessionId) {
       clearTimeout(autoSaveTimeout);
@@ -807,7 +848,7 @@ export const useStore = create<AppStore>((set, get) => ({
          get().saveCurrentSession();
       }, CONFIG.ui.autoSaveDebounceMs);
     }
-    
+
     return { pages: newPages };
   }),
   removePage: (index) => set((state) => {
@@ -816,8 +857,8 @@ export const useStore = create<AppStore>((set, get) => ({
     newPages.splice(index, 1);
     let newIndex = state.currentPageIndex;
     if (newIndex >= newPages.length) newIndex = newPages.length - 1;
-    return { 
-      pages: newPages, 
+    return {
+      pages: newPages,
       currentPageIndex: newIndex,
       activeMindmapNodes: newPages[newIndex]?.mindmapNodes || []
     };
@@ -842,7 +883,7 @@ export const useStore = create<AppStore>((set, get) => ({
     return { theme: newTheme };
   }),
 
-  
+
   toggleCreatorMode: () => set((state) => ({ isCreatorMode: !state.isCreatorMode })),
   setActiveTool: (tool) => set({ activeTool: tool }),
   setShapeFilled: (filled) => set({ isShapeFilled: filled }),
@@ -850,9 +891,9 @@ export const useStore = create<AppStore>((set, get) => ({
   setFontSize: (size) => set({ fontSize: size }),
   setBrushColor: (color) => set({ brushColor: color }),
   setBrushWidth: (width) => set({ brushWidth: width }),
-  
+
   addAction: (action) => set((state) => ({ actionQueue: [...state.actionQueue, action] })),
-  
+
   popAction: () => {
     const state = get();
     if (state.actionQueue.length === 0) return undefined;
@@ -862,16 +903,16 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
-  
-  clearMessages: () => set({ messages: [{ role: 'model', text: 'Halo! Saya Trido AI. Ada yang bisa dibantu?' }] }),
-  
+
+  clearMessages: () => set({ messages: [{ role: 'model', text: 'नमस्ते! मैं Vaani Board हूँ। बोलकर या लिखकर कक्षा शुरू करें।' }] }),
+
   addLog: (log) => set((state) => {
     const newLogs = [log, ...state.logs].slice(0, 50);
     return { logs: newLogs };
   }),
 
   clearQueue: () => set({ actionQueue: [] }),
-  
+
   currentTaskAbortController: null,
   setTaskAbortController: (controller) => set({ currentTaskAbortController: controller }),
 
@@ -882,14 +923,16 @@ export const useStore = create<AppStore>((set, get) => ({
         state.currentTaskAbortController.abort();
       } catch {}
     }
-    window.speechSynthesis.cancel();
-    set({ 
+    window.speechSynthesis?.cancel();
+    get().commitAiTransaction();
+    set({
       currentTaskAbortController: null,
-      actionQueue: [], 
-      isThinking: false, 
-      isActing: false, 
+      taskGeneration: get().taskGeneration + 1,
+      actionQueue: [],
+      isThinking: false,
+      isActing: false,
       currentAction: null,
-      agentMessage: 'Tugas dibatalkan oleh pengguna.' 
+      agentMessage: 'Teacher cancelled this task.'
     });
   },
 
@@ -931,4 +974,7 @@ export const useStore = create<AppStore>((set, get) => ({
   undoCanvas: () => {},
   redoCanvas: () => {},
   setUndoRedoFunctions: (undo, redo) => set({ undoCanvas: undo, redoCanvas: redo }),
+  beginAiTransaction: () => {},
+  commitAiTransaction: () => {},
+  setHistoryTransactionFunctions: (begin, commit) => set({ beginAiTransaction: begin, commitAiTransaction: commit }),
 }));

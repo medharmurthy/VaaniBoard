@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { motion, useMotionValue, useTransform, useSpring, useAnimationControls, type MotionValue } from 'framer-motion';
+import { motion, useMotionValue, useTransform, useSpring, useAnimationControls, type MotionValue } from 'motion/react';
 import {
   Clock, PencilRuler, FileText, HelpCircle, Activity, Network, Users,
   CheckSquare, Mic, Sparkles, MousePointer, Pencil, Eraser, Square, Type

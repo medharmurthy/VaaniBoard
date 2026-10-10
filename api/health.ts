@@ -8,8 +8,8 @@ export default function handler(_req: VercelRequest, res: VercelResponse) {
   res.status(200).json({
     status: 'ok',
     environment: 'vercel-serverless',
-    project: 'gemma4good-494311',
-    model: 'gemini-3.8-flash',
+    engine: 'cline',
+    model: 'gemini-3.5-flash-lite',
     timestamp: new Date().toISOString()
   });
 }

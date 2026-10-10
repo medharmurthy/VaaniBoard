@@ -10,6 +10,7 @@ import { toast } from '../utils/toast';
 import { parseDocumentFile } from '../utils/documentParser';
 import { markdownToMermaidMindmap } from './MermaidTool';
 import { UploadCloud, FileText, Image as ImageIcon, Sparkles } from 'lucide-react';
+import { BoardHistory, type BoardSnapshot } from '../utils/boardHistory';
 
 interface CanvasManagerProps {
   onCanvasReady: (canvas: any) => void;
@@ -219,7 +220,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
       if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         useStore.getState().saveCurrentSession().then(() => {
-          toast.success('Papan tersimpan ke database lokal (Ctrl+S)');
+          toast.success('Board saved locally (Ctrl+S)');
         });
         return;
       }
@@ -259,7 +260,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
             if (obj.isDomPlaceholder) removeDomElement(obj.id);
           });
           canvas.discardActiveObject().requestRenderAll();
-          addLog(`Menghapus ${activeObjects.length} objek.`);
+          addLog(`Deleted ${activeObjects.length} objects.`);
         }
       }
     };
@@ -380,19 +381,30 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
         const obj = canvas.getObjects().find((o: any) => o.id === id);
         if (obj) {
           obj.set({ left: x, top: y });
+          obj.setCoords();
           canvas.requestRenderAll();
         }
       });
     };
     window.addEventListener('moveCanvasPlaceholder', handleMovePlaceholder);
 
+    const handleResizePlaceholder = (e: any) => {
+      const { id, width, height } = e.detail || {};
+      const object = canvas.getObjects().find((o: any) => o.id === id);
+      if (!object || !Number.isFinite(width) || !Number.isFinite(height)) return;
+      object.set({ width, height });
+      object.setCoords();
+      canvas.requestRenderAll();
+    };
+    window.addEventListener('resizeCanvasPlaceholder', handleResizePlaceholder);
+
     const updateDomFromObject = (obj: any) => {
        if (obj.isDomPlaceholder) {
          updateDomElement(obj.id, {
            x: obj.left,
            y: obj.top,
-           scaleX: 1,
-           scaleY: 1,
+           scaleX: obj.scaleX ?? 1,
+           scaleY: obj.scaleY ?? 1,
            rotation: obj.angle,
          });
        }
@@ -553,13 +565,11 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
     });
 
     // --- HISTORY LOGIC ---
-    let history: string[] = [];
-    let redoStack: string[] = [];
+    const history = new BoardHistory();
     let isHistoryUpdating = false;
 
     canvas.__clearHistory = () => {
-       history = [];
-       redoStack = [];
+       history.clear();
        setTimeout(saveHistory, 100);
     };
 
@@ -567,12 +577,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
 
     const saveHistory = () => {
       if (isHistoryUpdating || canvas.__loadingPage) return;
-      const json = JSON.stringify(canvas.toJSON(['id', 'zIndex', 'isDomPlaceholder']));
-      if (history.length === 0 || history[history.length - 1] !== json) {
-        history.push(json);
-        if (history.length > 50) history.shift();
-        redoStack = [];
-      }
+      history.record(snapshot());
       // Also update the store page data on every action
       useStore.getState().updatePageData(
         useStore.getState().currentPageIndex, 
@@ -604,31 +609,27 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
     // Initial state save
     setTimeout(saveHistory, 100);
 
-    const undoCanvas = () => {
-      if (history.length > 1) {
-        isHistoryUpdating = true;
-        redoStack.push(history.pop()!); // Current state goes to redo
-        const prevState = history[history.length - 1]; // We don't pop the prev state, it remains active
-        canvas.loadFromJSON(prevState, () => {
-          canvas.renderAll();
-          isHistoryUpdating = false;
-        });
-      }
+    const snapshot = (): BoardSnapshot => ({canvas:JSON.stringify(canvas.toJSON(['id','zIndex','isDomPlaceholder'])),dom:JSON.stringify(useStore.getState().domElements)});
+    const restore = (state?: BoardSnapshot) => {
+      if (!state || isHistoryUpdating) return;
+      isHistoryUpdating = true;
+      canvas.loadFromJSON(state.canvas, () => {
+        useStore.getState().setDomElements(JSON.parse(state.dom));
+        canvas.renderAll(); isHistoryUpdating = false;
+        useStore.getState().updatePageData(useStore.getState().currentPageIndex,canvas.toJSON(['id','zIndex','isDomPlaceholder']),useStore.getState().domElements);
+      });
     };
-
-    const redoCanvas = () => {
-      if (redoStack.length > 0) {
-        isHistoryUpdating = true;
-        const nextState = redoStack.pop()!;
-        history.push(nextState);
-        canvas.loadFromJSON(nextState, () => {
-          canvas.renderAll();
-          isHistoryUpdating = false;
-        });
-      }
-    };
+    const undoCanvas = () => { if (!isHistoryUpdating) { saveHistory(); restore(history.undo()); } };
+    const redoCanvas = () => { if (!isHistoryUpdating) restore(history.redo()); };
 
     useStore.getState().setUndoRedoFunctions(undoCanvas, redoCanvas);
+    useStore.getState().setHistoryTransactionFunctions(() => history.begin(snapshot()), () => { history.commit(snapshot()); saveHistory(); });
+    let domHistoryTimer: ReturnType<typeof setTimeout>;
+    const unsubscribeHistory = useStore.subscribe((state,previous) => {
+      if (state.domElements !== previous.domElements && !isHistoryUpdating && !canvas.__loadingPage) {
+        clearTimeout(domHistoryTimer); domHistoryTimer=setTimeout(saveHistory,150);
+      }
+    });
 
     // Set initial center coordinates
     const center = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -663,10 +664,13 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
     canvas.on('object:removed', triggerDebouncedSnapshot);
 
     onCanvasReady(fabricRef);
-    addLog('Pemetaan kanvas aktif.');
+    addLog('Whiteboard ready.');
 
     return () => {
       cancelAnimationFrame(rafId);
+      unsubscribeHistory(); clearTimeout(domHistoryTimer); clearTimeout(savePreviewTimeout);
+      useStore.getState().setUndoRedoFunctions(()=>{},()=>{});
+      useStore.getState().setHistoryTransactionFunctions(()=>{},()=>{});
       resizeObserver.disconnect();
       clearTimeout(resizeTimeout);
       clearTimeout(autoSaveTimer);
@@ -682,6 +686,8 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
       window.removeEventListener('removeCanvasObject', handleRemoteRemove);
       window.removeEventListener('clearCanvas', handleClearCanvas);
       window.removeEventListener('moveCanvasPlaceholder', handleMovePlaceholder);
+      window.removeEventListener('resizeCanvasPlaceholder', handleResizePlaceholder);
+      if (movePlaceholderRaf) cancelAnimationFrame(movePlaceholderRaf);
     };
   }, []);
 
@@ -997,7 +1003,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
               canvas.add(img);
               canvas.setActiveObject(img);
               canvas.requestRenderAll();
-              toast.success(`Gambar "${file.name}" ditambahkan.`);
+              toast.success(`Image "${file.name}" added.`);
             });
           };
           reader.readAsDataURL(file);
@@ -1038,13 +1044,13 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
               zIndex: 10,
               componentType: 'MERMAID_DIAGRAM',
               config: {
-                title: file.name.replace(/\.[^/.]+$/, '') || 'Peta Konsep',
+                title: file.name.replace(/\.[^/.]+$/, '') || 'Mind map',
                 code
               }
             });
             canvas.setActiveObject(rect);
             canvas.requestRenderAll();
-            toast.success(`Peta konsep Mermaid dibuat dari "${file.name}".`);
+            toast.success(`Mermaid mind map created from "${file.name}".`);
           };
           reader.readAsText(file);
         }
@@ -1078,14 +1084,14 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
               componentType: 'DOCUMENT_PAGE',
               config: {
                 title: doc.name,
-                markdown: `# ${doc.name}\n\n${doc.text.slice(0, 3000)}${doc.text.length > 3000 ? '\n\n*(Teks dipersingkat)*' : ''}`
+                markdown: `# ${doc.name}\n\n${doc.text.slice(0, 3000)}${doc.text.length > 3000 ? '\n\n*(Text shortened)*' : ''}`
               }
             });
             canvas.setActiveObject(rect);
             canvas.requestRenderAll();
-            toast.success(`Dokumen "${doc.name}" siap di kanvas.`);
+            toast.success(`Document "${doc.name}" is ready on the canvas.`);
           } catch (err) {
-            toast.error(`Gagal membaca dokumen: ${(err as any)?.message}`);
+            toast.error(`Could not read the document: ${(err as any)?.message}`);
           }
         }
       }
@@ -1102,7 +1108,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
         const height = 560;
         const code = rawText.trim().startsWith('mindmap')
           ? rawText.trim()
-          : markdownToMermaidMindmap(rawText, 'Catatan Peta Konsep');
+          : markdownToMermaidMindmap(rawText, 'Mind map notes');
         const rect = new window.fabric.Rect({
           left: worldPos.x, top: worldPos.y, width, height,
           fill: 'rgba(255,255,255,0.01)',
@@ -1123,11 +1129,11 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
           rotation: 0,
           zIndex: 10,
           componentType: 'MERMAID_DIAGRAM',
-          config: { title: 'Peta Konsep', code }
+          config: { title: 'Mind map', code }
         });
         canvas.setActiveObject(rect);
         canvas.requestRenderAll();
-        toast.success('Peta konsep Mermaid dibuat dari teks.');
+        toast.success('Mermaid mind map created from text.');
       } else {
         const textObj = new window.fabric.IText(rawText.trim(), {
           left: worldPos.x,
@@ -1140,7 +1146,7 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
         canvas.add(textObj);
         canvas.setActiveObject(textObj);
         canvas.requestRenderAll();
-        toast.success('Teks ditambahkan ke kanvas.');
+        toast.success('Text added to the canvas.');
       }
     }
   }, [fontFamily, fontSize, brushColor, updateDomElement]);
@@ -1176,15 +1182,15 @@ export const CanvasManager: React.FC<CanvasManagerProps> = ({ onCanvasReady }) =
                 Lepaskan File di Kanvas
               </h3>
               <p className="text-xs text-indigo-700 font-medium max-w-sm">
-                Tarik gambar (.png, .jpg), dokumen (.pdf, .docx), atau catatan (.md) untuk ditaruh langsung ke posisi kursor.
+                Drag an image (.png, .jpg), document (.pdf, .docx) or note (.md) to place it at the cursor.
               </p>
             </div>
             <div className="flex items-center gap-3 text-[11px] font-bold text-indigo-600 bg-white/80 px-4 py-1.5 rounded-full border border-indigo-200">
-              <span className="flex items-center gap-1"><ImageIcon size={12} /> Gambar</span>
+              <span className="flex items-center gap-1"><ImageIcon size={12} /> Images</span>
               <span>•</span>
               <span className="flex items-center gap-1"><Sparkles size={12} /> Mermaid Mindmap</span>
               <span>•</span>
-              <span className="flex items-center gap-1"><FileText size={12} /> Dokumen</span>
+              <span className="flex items-center gap-1"><FileText size={12} /> Documents</span>
             </div>
           </motion.div>
         )}

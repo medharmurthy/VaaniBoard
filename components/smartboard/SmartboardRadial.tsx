@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Plus, X, Clock, PencilRuler, FileText, HelpCircle, Activity, Network,
   Users, CheckSquare, Mic, Pencil, Eraser, Square, Type, Sparkles

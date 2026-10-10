@@ -15,7 +15,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
   const [selected, setSelected] = useState<boolean | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  const statementText = config?.statement || config?.question || config?.title || 'Pernyataan Konsep Pembelajaran';
+  const statementText = config?.statement || config?.question || config?.title || 'Concept statement';
   const expectedBool = config?.isTrue !== undefined ? config.isTrue : (config?.correct !== undefined ? Boolean(config.correct) : true);
 
   const getBtnClass = (val: boolean) => {
@@ -39,7 +39,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
     <div className="flex w-full h-full flex-col bg-white p-6 font-sans select-none">
       <div className="flex-1 flex flex-col justify-center items-center text-center">
         <span className="text-[11px] font-black tracking-widest text-indigo-600 uppercase mb-3 bg-indigo-50 px-3 py-1 rounded-full">
-          ⚖️ Benar atau Salah
+          ⚖️ True or False
         </span>
         <h3 className="mb-6 text-lg font-bold text-slate-800 leading-relaxed max-w-sm">
           {statementText}
@@ -53,7 +53,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
             <div className="bg-white p-2.5 rounded-full shadow-sm">
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-6 h-6 text-emerald-500"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </div>
-            <span className="font-bold text-sm tracking-wider">BENAR</span>
+            <span className="font-bold text-sm tracking-wider">TRUE</span>
           </button>
           
           <button
@@ -63,7 +63,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
             <div className="bg-white p-2.5 rounded-full shadow-sm">
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-6 h-6 text-rose-500"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </div>
-            <span className="font-bold text-sm tracking-wider">SALAH</span>
+            <span className="font-bold text-sm tracking-wider">FALSE</span>
           </button>
         </div>
       </div>
@@ -75,7 +75,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
              onClick={() => setSubmitted(true)}
              className="w-full bg-indigo-600 font-bold text-white py-3 rounded-xl shadow-md shadow-indigo-200 hover:bg-indigo-700 transition disabled:opacity-40 disabled:shadow-none uppercase tracking-wider text-xs no-print"
            >
-             Periksa Jawaban
+             Check answer
            </button>
         ) : (
            <div className="flex flex-col gap-2">
@@ -84,11 +84,11 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${isCorrect ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
                    {isCorrect ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-4 h-4"><polyline points="20 6 9 17 4 12"></polyline></svg> : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>}
                  </div>
-                 <span className="font-bold text-sm">{isCorrect ? 'Tepat Sekali!' : 'Belum Tepat'}</span>
+                 <span className="font-bold text-sm">{isCorrect ? 'Correct!' : 'Not quite right'}</span>
                </div>
                {config?.explanation && (
                  <p className="text-xs text-slate-600 mt-1 pl-8 leading-relaxed">
-                   <strong>Penjelasan:</strong> {config.explanation}
+                   <strong>Explanation:</strong> {config.explanation}
                  </p>
                )}
              </div>
@@ -97,7 +97,7 @@ export const QuizTrueFalse: React.FC<QuizTrueFalseProps> = ({ config }) => {
                onClick={() => { setSelected(null); setSubmitted(false); }}
                className="w-full bg-slate-100 font-bold text-slate-600 py-2.5 rounded-xl hover:bg-slate-200 transition text-xs uppercase tracking-wider no-print"
              >
-               Coba Lagi
+               Try again
              </button>
            </div>
         )}

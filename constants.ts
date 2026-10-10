@@ -1,5 +1,5 @@
-export const GEMINI_MODEL = 'gemini-3.8-flash';
-export const OLLAMA_MODEL = 'trido-model:latest';
+export const GEMINI_MODEL = 'gemini-3.5-flash-lite';
+export const OLLAMA_MODEL = 'gemma4:e2b';
 export const OLLAMA_THINKING_MODE = 'nothink';
 export const DEFAULT_CANVAS_COLOR = 'transparent';
 export const AGENT_THINKING_BUDGET = 0;
@@ -29,9 +29,9 @@ export const CONFIG = {
       generateTimeoutMs: 300000,
     },
     vertex: {
-      model: 'gemini-3.8-flash',
+      model: GEMINI_MODEL,
       location: 'global',
-      projectId: 'gemma4good-494311',
+      projectId: '',
       probeTimeoutMs: 3000,
       generateTimeoutMs: 120000,
       generation: {

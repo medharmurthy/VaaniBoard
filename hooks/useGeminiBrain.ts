@@ -6,6 +6,12 @@ import { CALCULATOR_TEMPLATE, TIMER_TEMPLATE } from '../services/componentTempla
 import { createLogger } from '../utils/logger';
 import { sounds } from '../utils/sounds';
 import { layoutMindmap, expandMindmapNodes, findMatchingMindmapNode, NODE_STYLE_CONFIG, MindmapInputNode, MindmapLayoutNode } from '../utils/mindmapLayout';
+import { matchReflex } from '../utils/reflexGrammar';
+import { normalizeIndicText, detectBoardLanguage } from '../utils/indicNormalize';
+import { approveClassroomProposal } from '../services/classroomActions';
+import { stopSpeaking } from '../services/speechService';
+import { getBoardLayoutContext, layoutCardActions } from '../utils/boardLayout';
+import { localizeWarning } from '../utils/warningLanguage';
 
 const logger = createLogger('gemini-brain');
 
@@ -15,41 +21,7 @@ let isProcessingGlobal = false;
 // ============================================================================
 // SYNTHESIZED FALLBACK TEXT (tidak bergantung pada model)
 // ============================================================================
-const synthesizeFallbackResponse = (
-  functionCalls: any[],
-  lessonPlan: LessonPlan | null
-): string => {
-  if (functionCalls.length === 0) {
-    return 'Baik, ada yang bisa saya bantu?';
-  }
-
-  const toolNames = functionCalls.map(c => c.name);
-  const mindmapCount = functionCalls.filter(c => c.name === 'add_mindmap_node').length;
-  const hasQuiz = functionCalls.some(c => 
-    c.name === 'add_component' && 
-    String(c.args?.componentType || '').startsWith('QUIZ')
-  );
-  const hasDocument = functionCalls.some(c => 
-    c.name === 'add_component' && 
-    ['DOCUMENT_PAGE', 'MARKDOWN_NOTE'].includes(c.args?.componentType)
-  );
-  const hasApp = toolNames.includes('add_interactive_app');
-  const topic = lessonPlan?.topic || '';
-
-  if (mindmapCount > 0) {
-    return `Peta konsep${topic ? ` ${topic}` : ''} sudah ${mindmapCount > 3 ? 'dibuat' : 'diperbarui'} dengan ${mindmapCount} elemen. Ketik "lanjut" untuk materi berikutnya, atau minta detail tambahan pada bagian tertentu.`;
-  }
-  if (hasQuiz) {
-    return `Soal latihan${topic ? ` tentang ${topic}` : ''} sudah siap di papan! Beri waktu murid mengerjakan, lalu kita bahas bersama.`;
-  }
-  if (hasDocument) {
-    return `Materi${topic ? ` ${topic}` : ''} sudah saya siapkan di papan. Mau saya tambahkan quiz untuk latihan?`;
-  }
-  if (hasApp) {
-    return 'Aplikasi interaktif sudah ditambahkan ke papan. Coba klik dan jelajahi bersama murid.';
-  }
-  return 'Sudah selesai dikerjakan di papan!';
-};
+const synthesizeFallbackResponse = (calls:any[], lessonPlan:LessonPlan|null):string => calls.length ? 'Board updated. You can ask for the next activity or undo this turn.' : 'How can I help with your lesson?';
 
 // ============================================================================
 // JEV SYSTEM 1 REFLEX CLASSIFIER (<15ms INSTANT DECISION ENGINE)
@@ -67,89 +39,41 @@ export function evaluateJevSystemOne(
   storeState: any,
   canvas: any
 ): JevReflexResult {
-  const norm = prompt.toLowerCase().trim();
-
-  // 1. Instant Reflex Handlers (<15ms, zero LLM roundtrip)
-  if (/^(buka|tampilkan|nyalakan|start|show|open)\s+(timer|penghitung waktu|stopwatch)/i.test(norm)) {
-    if (!storeState.isTimerOpen) storeState.toggleTimer();
-    return { handled: true, actionTaken: 'TOGGLE_TIMER', message: '⏱️ Timer telah dibuka seketika oleh Jev-1.' };
-  }
-  if (/^(tutup|close|sembunyikan|hide)\s+(timer|stopwatch)/i.test(norm)) {
-    if (storeState.isTimerOpen) storeState.toggleTimer();
-    return { handled: true, actionTaken: 'CLOSE_TIMER', message: '⏱️ Timer telah ditutup.' };
-  }
-  if (/^(buka|tampilkan|hitung|open)\s+(kalkulator|calculator)/i.test(norm)) {
-    if (!storeState.isCalculatorOpen) storeState.toggleCalculator();
-    return { handled: true, actionTaken: 'TOGGLE_CALCULATOR', message: '🧮 Kalkulator telah dibuka oleh Jev-1.' };
-  }
-  if (/^(tutup|close)\s+(kalkulator|calculator)/i.test(norm)) {
-    if (storeState.isCalculatorOpen) storeState.toggleCalculator();
-    return { handled: true, actionTaken: 'CLOSE_CALCULATOR', message: '🧮 Kalkulator ditutup.' };
-  }
-  if (/^(buka|tampilkan|open)\s+(catatan|notes|note)/i.test(norm)) {
-    if (!storeState.isNotesOpen) storeState.toggleNotes();
-    return { handled: true, actionTaken: 'TOGGLE_NOTES', message: '📝 Catatan dibuka seketika.' };
-  }
-  if (/^(buka|tampilkan|open)\s+(absensi|presensi|kehadiran|roster)/i.test(norm)) {
-    if (!storeState.isAttendanceOpen) storeState.toggleAttendance();
-    return { handled: true, actionTaken: 'TOGGLE_ATTENDANCE', message: '📋 Daftar presensi dibuka oleh Jev-1.' };
-  }
-  if (/^(buka|tampilkan|open)\s+(todo|daftar tugas|agenda)/i.test(norm)) {
-    if (!storeState.isTodoListOpen) storeState.toggleTodoList();
-    return { handled: true, actionTaken: 'TOGGLE_TODOLIST', message: '✅ Agenda kelas dibuka.' };
-  }
-  if (/^(buka|putar|spin|roll)\s+(roda|spin wheel|wheel|roda keberuntungan)/i.test(norm)) {
-    storeState.toggleSpinWheel();
-    return { handled: true, actionTaken: 'TOGGLE_SPIN_WHEEL', message: '🎡 Roda acak siswa dibuka oleh Jev-1.' };
-  }
-  if (/^(buka|tampilkan)\s+(papan skor|scoreboard|skor)/i.test(norm)) {
-    storeState.toggleScoreboard();
-    return { handled: true, actionTaken: 'TOGGLE_SCOREBOARD', message: '🏆 Papan skor dibuka.' };
-  }
-  if (/^(undo|batalkan|kembali)/i.test(norm)) {
-    if (typeof (window as any).__tridoUndo === 'function') (window as any).__tridoUndo();
-    return { handled: true, actionTaken: 'UNDO', message: '↩️ Aksi terakhir dibatalkan oleh Jev-1.' };
-  }
-  if (/^(redo|ulangi)/i.test(norm)) {
-    if (typeof (window as any).__tridoRedo === 'function') (window as any).__tridoRedo();
-    return { handled: true, actionTaken: 'REDO', message: '↪️ Aksi diulangi oleh Jev-1.' };
-  }
-  if (/^(zoom in|perbesar|zoom dekat)/i.test(norm)) {
-    if (canvas) {
-      canvas.setZoom(Math.min(canvas.getZoom() * 1.25, 4));
-      canvas.requestRenderAll();
+  const reflex = matchReflex(prompt);
+  if (reflex) {
+    const hi = storeState.language === 'hi';
+    let message = hi ? 'हो गया।' : 'Done.';
+    switch (reflex.id) {
+      case 'UNDO': storeState.undoCanvas?.(); message = hi ? 'पिछला काम हटा दिया।' : 'Last board action undone.'; break;
+      case 'REDO': storeState.redoCanvas?.(); break;
+      case 'READ_BOARD': window.dispatchEvent(new Event('vaani:read-board')); message = hi ? 'बोर्ड पढ़ रहा हूँ।' : 'Reading the board.'; break;
+      case 'STOP_SPEAK': stopSpeaking(); break;
+      case 'ACCEPT_PROPOSAL': {
+        const p = storeState.proposals?.[0];
+        if (p) approveClassroomProposal(p.id, canvas);
+        else message = hi ? 'कोई सुझाव नहीं है।' : 'No suggestion to approve.';
+        break;
+      }
+      case 'REJECT_PROPOSAL': {
+        const p = storeState.proposals?.[0]; if (p) storeState.dismissProposal?.(p.id); break;
+      }
+      case 'TIMER': {
+        const v = canvas?.viewportTransform || [1, 0, 0, 1, 0, 0];
+        storeState.addAction?.({ id: crypto.randomUUID(), type: 'RENDER_HTML', status: 'PENDING', payload: {
+          html: '<div>Timer</div>', componentType: 'TIMER', config: { seconds: reflex.seconds || 300, mode: 'TIMER', isRunning: true },
+          x: ((canvas?.width || 1000) / 2 - v[4]) / v[0], y: ((canvas?.height || 700) / 2 - v[5]) / v[0], width: 320, height: 360,
+        }}); break;
+      }
+      case 'ZOOM_IN': case 'ZOOM_OUT':
+        if (canvas) { canvas.setZoom(Math.max(.2, Math.min(4, canvas.getZoom() * (reflex.id === 'ZOOM_IN' ? 1.25 : .8)))); canvas.requestRenderAll(); } break;
     }
-    return { handled: true, actionTaken: 'ZOOM_IN', message: '🔍 Zoom diperbesar oleh Jev-1.' };
+    return { handled: true, actionTaken: reflex.id, message };
   }
-  if (/^(zoom out|perkecil|zoom jauh)/i.test(norm)) {
-    if (canvas) {
-      canvas.setZoom(Math.max(canvas.getZoom() * 0.8, 0.2));
-      canvas.requestRenderAll();
-    }
-    return { handled: true, actionTaken: 'ZOOM_OUT', message: '🔍 Zoom diperkecil oleh Jev-1.' };
-  }
-  if (/^(reset zoom|fit view|pusatkan|reset kanvas)/i.test(norm)) {
-    if (canvas) {
-      canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-      canvas.requestRenderAll();
-    }
-    return { handled: true, actionTaken: 'RESET_ZOOM', message: '🎯 Tampilan kanvas dipusatkan oleh Jev-1.' };
-  }
-
-  // 2. In-Place Target Element Locking for System 2
-  const isModification = /ubah|ganti|edit|tambah cabang|subtopik|perbarui|update|revisi/i.test(norm);
-  if (isModification) {
-    const doms = storeState.domElements || {};
-    const diagrams = Object.entries(doms).filter(([_, el]: any) => {
-      const ct = (el.componentType || '').toLowerCase();
-      return ct.includes('mermaid') || ct.includes('markmap');
-    });
-    const targetId = diagrams.length > 0 ? diagrams[diagrams.length - 1][0] : undefined;
-    return {
-      handled: false,
-      lockIntent: 'modification',
-      targetObjectId: targetId
-    };
+  const norm = normalizeIndicText(prompt);
+  if (/^(?:open calculator|calculator kholo)$/.test(norm)) { storeState.toggleCalculator?.(); return {handled:true,actionTaken:'TOGGLE_CALCULATOR',message:'Calculator opened.'}; }
+  if (/edit|update|change|badlo|बदलो|tambah cabang|ubah/i.test(norm)) {
+    const diagrams = Object.entries(storeState.domElements || {}).filter(([_, el]:any) => /MERMAID|MARKMAP/.test(el.componentType || ''));
+    return {handled:false,lockIntent:'modification',targetObjectId:diagrams.at(-1)?.[0]};
   }
 
   return { handled: false };
@@ -172,7 +96,7 @@ const validateAndFixToolCall = (call: any): { valid: boolean; fixed?: any; error
         return {
           valid: false,
           error: 'Missing required code for render_mermaid',
-          fixed: { ...args, code: 'mindmap\n  root((Peta Konsep))\n    Cabang 1\n    Cabang 2' }
+          fixed: { ...args, code: 'mindmap\n  root((Concept map))\n    Branch 1\n    Branch 2' }
         };
       }
       return { valid: true };
@@ -229,7 +153,7 @@ const validateAndFixToolCall = (call: any): { valid: boolean; fixed?: any; error
           fixed: null
         };
       }
-      const validActions = ['MOVE_TO_GRID', 'DELETE', 'UPDATE_TEXT', 'RESIZE_OBJECT'];
+      const validActions = ['MOVE_TO_GRID', 'DELETE', 'UPDATE_TEXT', 'RESIZE', 'CHANGE_COLOR', 'CHANGE_STROKE'];
       if (!args.action || !validActions.includes(args.action)) {
         return {
           valid: false,
@@ -265,8 +189,8 @@ const validateAndFixToolCall = (call: any): { valid: boolean; fixed?: any; error
 };
 
 const classifyIntent = (prompt: string): 'question' | 'creation' | 'modification' | 'navigation' => {
-  const modificationWords = /ubah|edit|hapus|delete|pindah|move|update|ganti|change|geser|drag|geserkan|pindahkan|reposition|align/i;
-  const creationWords = /buat|create|gambar|draw|tambah|add|tulis|write|bikin|generate|tarik|garis|panah|arrow|line|hubungkan|connect|shape|kotak|lingkaran|segitiga|mindmap|diagram|peta konsep|tabel|rangkum|susun|visual/i;
+  const modificationWords = /edit|delete|move|update|change|drag|reposition|align|badlo|hatao|बदलो|हटाओ/i;
+  const creationWords = /create|draw|add|write|generate|arrow|line|connect|shape|mind.?map|diagram|quiz|game|visual|banao|dikhao|बनाओ|दिखाओ/i;
   const navigationWords = /pergi|go|zoom|pan|navigasi|navigate|ke halaman|page/i;
   const questionWords = /(apa|bagaimana|mengapa|kapan|siapa|berapa|what|how|why|when|who|jelaskan|terangkan)/i;
 
@@ -286,18 +210,9 @@ interface ParsedLesson {
 }
 
 const detectLessonStart = (prompt: string): ParsedLesson => {
-  const subjectMap: Record<string, string> = {
-    'ipa': 'IPA', 'biologi': 'IPA Biologi', 'fisika': 'IPA Fisika',
-    'kimia': 'IPA Kimia', 'matematika': 'Matematika', 'mtk': 'Matematika',
-    'ips': 'IPS', 'sejarah': 'IPS Sejarah', 'geografi': 'IPS Geografi',
-    'bahasa indonesia': 'Bahasa Indonesia', 'b.indo': 'Bahasa Indonesia',
-    'bahasa inggris': 'Bahasa Inggris', 'english': 'Bahasa Inggris',
-    'pkn': 'PKN', 'agama': 'Pendidikan Agama', 'seni': 'Seni Budaya',
-    'penjaskes': 'PJOK', 'olahraga': 'PJOK'
-  };
-  
-  const gradePattern = /kelas\s*(\d+[a-zA-Z]?)|grade\s*(\d+)|sd|smp|sma/i;
-  const lessonStartWords = /^(hari ini|materi|topik|belajar|ajar|teach|today|lesson about)/i;
+  const subjectMap: Record<string,string> = {science:'Science',maths:'Mathematics',math:'Mathematics',evs:'EVS',hindi:'Hindi',english:'English','विज्ञान':'Science','गणित':'Mathematics'};
+  const gradePattern = /(?:class|grade|कक्षा)\s*(\d+)/i;
+  const lessonStartWords = /^(aaj|today|teach|lesson about|आज)/i;
   const subjectPattern = new RegExp(Object.keys(subjectMap).join('|'), 'i');
   
   const hasLessonStart = lessonStartWords.test(prompt.trim());
@@ -309,7 +224,7 @@ const detectLessonStart = (prompt: string): ParsedLesson => {
   }
   
   // Extract subject
-  let detectedSubject = 'Umum';
+  let detectedSubject = 'General';
   for (const [key, value] of Object.entries(subjectMap)) {
     if (prompt.toLowerCase().includes(key)) {
       detectedSubject = value;
@@ -320,7 +235,7 @@ const detectLessonStart = (prompt: string): ParsedLesson => {
   // Extract grade
   let detectedGrade = '';
   if (gradeMatch) {
-    detectedGrade = `Kelas ${gradeMatch[1] || gradeMatch[2] || ''}`.trim();
+    detectedGrade = `Class ${gradeMatch[1] || ''}`.trim();
     if (prompt.toLowerCase().includes('sd')) detectedGrade += ' SD';
     if (prompt.toLowerCase().includes('smp')) detectedGrade += ' SMP';
     if (prompt.toLowerCase().includes('sma')) detectedGrade += ' SMA';
@@ -344,8 +259,8 @@ const detectLessonStart = (prompt: string): ParsedLesson => {
   return {
     isLessonStart: true,
     subject: detectedSubject,
-    topic: topic || 'Materi Pembelajaran',
-    gradeLevel: detectedGrade || 'Tidak ditentukan'
+    topic: topic || 'Lesson topic',
+    gradeLevel: detectedGrade || 'Not specified'
   };
 };
 
@@ -357,12 +272,17 @@ export const useGeminiBrain = () => {
     prompt: string,
     canvasRef: React.MutableRefObject<any>
   ) => {
+    const entryState = useStore.getState();
+    if (prompt.trim() !== entryState.lastVoiceCommand?.trim()) entryState.setWarningLanguage(entryState.language);
+    const overrideLanguage = detectBoardLanguage(prompt);
+    if (overrideLanguage) useStore.getState().setBoardLanguage(overrideLanguage);
+    if (/nipun|निपुण/i.test(prompt)) useStore.getState().setLessonMode('nipun');
     // Lock guard to prevent concurrent requests
-    if (isProcessingGlobal || isProcessingRef.current) {
-      addLog('Permintaan sebelumnya masih diproses, mohon tunggu.');
+    if (isProcessingGlobal || isProcessingRef.current || useStore.getState().isActing || useStore.getState().actionQueue.length) {
+       addLog('The previous request is still processing. Please wait.');
       addMessage({ 
         role: 'model', 
-        text: 'Tunggu sebentar, saya masih menyelesaikan permintaan sebelumnya...' 
+        text: 'Please wait while I finish the previous request.'
       });
       return;
     }
@@ -379,14 +299,14 @@ export const useGeminiBrain = () => {
     const storeState = useStore.getState();
 
     // ── JEV SYSTEM 1 REFLEX GATE (Instant Classifier <15ms) ───────────
-    const isJevActive = storeState.experimentalConfig?.enabled && storeState.experimentalConfig?.jevModeEnabled !== false;
+    const isJevActive = true;
     let jevLockedTargetId: string | undefined = undefined;
 
     if (isJevActive) {
       const jevResult = evaluateJevSystemOne(prompt, storeState, canvas);
       if (jevResult.handled) {
         sounds.play('pop');
-        const reply = jevResult.message || 'Perintah instan telah dijalankan.';
+        const reply = jevResult.message || 'Command completed.';
         addMessage({
           role: 'model',
           text: reply
@@ -404,7 +324,7 @@ export const useGeminiBrain = () => {
 
     setThinking(true);
     sounds.play('thinking');
-    addLog(`Pemindaian neural dimulai...`);
+    addLog('Reading board context…');
 
     const abortController = new AbortController();
     useStore.getState().setTaskAbortController(abortController);
@@ -583,7 +503,11 @@ ${jevDirective}
         return;
       }
 
-      let functionCalls = _aiResult.functionCalls;
+      let functionCalls = Array.isArray(_aiResult.functionCalls) ? _aiResult.functionCalls : [];
+      useStore.getState().setClassroomEngine(_aiResult.engine === 'local' ? 'Local deterministic tools' : 'Cline SDK agent');
+      if (_aiResult.engine) useStore.getState().addLog(`Engine: ${_aiResult.engine} · ${(_aiResult.events || []).join(' → ')}`);
+      if (Array.isArray(_aiResult.proposals)) useStore.getState().setProposals(_aiResult.proposals);
+      if (Array.isArray(_aiResult.citations)) useStore.getState().setCitations(_aiResult.citations);
       const { textResponse, thought } = _aiResult;
 
       if (thought) addLog(`AI Thoughts: ${thought}`);
@@ -615,7 +539,7 @@ ${jevDirective}
         telemetryId: tele?.id,
         tokens: tele?.totalTokens,
         latencyMs: tele?.latencyMs,
-        costIdr: tele?.costIdr,
+        costInr: tele?.costInr,
         model: tele?.model || _aiResult?.model || storeState.selectedOllamaModel || storeState.selectedGeminiModel || storeState.selectedVertexModel,
         provider: tele?.provider || _aiResult?.provider || storeState.aiPreference
       });
@@ -639,7 +563,7 @@ ${jevDirective}
             reason: validation.error
           });
           if (validation.fixed) {
-            return { ...call, args: validation.fixed };
+            return null;
           }
         }
         return call;
@@ -660,7 +584,7 @@ ${jevDirective}
       const seenSigs = new Set<string>();
       functionCalls = functionCalls.filter(call => {
         const args = call.args || {};
-        const sig = [call.name, args.text || '', args.gridPosition || '', args.parentNodeText || '', args.objectId || '', args.fromNodeText || '', args.toNodeText || ''].join(':');
+        const sig = JSON.stringify({name:call.name,args});
         if (seenSigs.has(sig)) { logger.warn(`[Dedup] Skipped: ${sig}`); return false; }
         seenSigs.add(sig);
         return true;
@@ -723,13 +647,13 @@ ${jevDirective}
       // ── Mind map via Mermaid Engine (Pure Interactive Diagram) ─────────────
       if (mindmapCalls.length > 0) {
         const rootCall = mindmapCalls.find(c => c.args.style === 'MAIN_TOPIC' || !c.args.parentNodeText) || mindmapCalls[0];
-        const rootTitle = (rootCall.args.text || 'Peta Konsep').replace(/["'()\[\]{}]/g, '').trim();
+        const rootTitle = (rootCall.args.text || 'Concept map').replace(/["'()\[\]{}]/g, '').trim();
         
         let mermaidCode = `mindmap\n  root((${rootTitle}))\n`;
         const otherNodes = mindmapCalls.filter(c => c !== rootCall);
         
         for (const node of otherNodes) {
-          const cleanText = (node.args.text || 'Cabang').replace(/["'()\[\]{}]/g, '').trim();
+          const cleanText = (node.args.text || 'Branch').replace(/["'()\[\]{}]/g, '').trim();
           mermaidCode += `    ${cleanText}\n`;
         }
 
@@ -744,7 +668,7 @@ ${jevDirective}
             height: 580,
             componentType: 'MERMAID_DIAGRAM',
             config: {
-              title: `Peta Konsep ${rootTitle}`,
+              title: `Concept map: ${rootTitle}`,
               code: mermaidCode
             }
           },
@@ -846,15 +770,19 @@ ${jevDirective}
           }
           if (!configObj) {
             configObj = {
-              title: args.title || 'Catatan Pelajaran',
+              title: args.title || 'Lesson notes',
               markdown: args.markdown || args.content || args.text || '',
               ...(args.questions ? { questions: args.questions } : {}),
               ...(args.seconds ? { seconds: args.seconds } : {})
             };
           }
+          configObj.lang = configObj.lang || useStore.getState().boardLanguage;
+          if (useStore.getState().lessonMode === 'nipun') configObj.nipunMode = true;
 
           if (cType === 'DOCUMENT_PAGE' || cType === 'MARKDOWN_NOTE') {
-            pWidth = 600; pHeight = 700;
+            pWidth = 660; pHeight = Math.min(640,Math.max(360,(br.y-tl.y)*0.76));
+          } else if (cType === 'LABELLED_DIAGRAM') {
+            pWidth = 700; pHeight = configObj.template==='digestive-system'?660:560;
           } else if (cType === 'QUIZ_MULTIPLE_CHOICE') {
             pWidth = 480; pHeight = 520;
             if (configObj?.questions && Array.isArray(configObj.questions) && configObj.questions.length > 1) {
@@ -890,7 +818,7 @@ ${jevDirective}
             height: 560,
             componentType: 'MERMAID_DIAGRAM',
             config: {
-              title: args.title || 'Peta Konsep Mermaid',
+              title: args.title || 'Concept map',
               markdown: args.markdown
             }
           };
@@ -905,7 +833,7 @@ ${jevDirective}
             width: 720,
             height: 560,
             componentType: 'MERMAID_DIAGRAM',
-            config: { title: args.title || 'Diagram Mermaid', code: args.code }
+            config: { title: args.title || 'Diagram', code: args.code, lang: useStore.getState().boardLanguage, citations: _aiResult.citations || [] }
           };
 
         } else if (call.name === 'mark_attendance') {
@@ -925,14 +853,14 @@ ${jevDirective}
           } else {
             actionType = 'RENDER_HTML';
             payload = {
-              html: '<div>Presensi</div>',
+              html: '<div>Attendance</div>',
               x: 960,
               y: 540,
               width: 380,
               height: 480,
               componentType: 'ATTENDANCE',
               config: {
-                title: 'Presensi Kelas',
+                title: 'Class attendance',
                 students: [{ id: `std_${Date.now()}`, name: args.studentName, status: args.status, note: args.note }]
               }
             };
@@ -941,25 +869,25 @@ ${jevDirective}
         } else if (call.name === 'spin_wheel') {
           actionType = 'RENDER_HTML';
           payload = {
-            html: '<div>Roda</div>',
+            html: '<div>Random picker</div>',
             x: 960,
             y: 540,
             width: 440,
             height: 480,
             componentType: 'SPIN_WHEEL',
-            config: { title: args.title || 'Roda Acak Siswa', items: args.items }
+            config: { title: args.title || 'Random pupil picker', items: args.items }
           };
 
         } else if (call.name === 'plot_math_function') {
           actionType = 'RENDER_HTML';
           payload = {
-            html: '<div>Grafik</div>',
+            html: '<div>Graph</div>',
             x: 960,
             y: 540,
             width: 460,
             height: 440,
             componentType: 'MATH_GRAPH',
-            config: { title: args.title || 'Grafik Matematika', type: args.type, a: args.a, b: args.b, c: args.c }
+            config: { title: args.title || 'Mathematics graph', type: args.type, a: args.a, b: args.b, c: args.c }
           };
 
         } else if (call.name === 'update_scoreboard') {
@@ -977,14 +905,14 @@ ${jevDirective}
           } else {
             actionType = 'RENDER_HTML';
             payload = {
-              html: '<div>Skor</div>',
+              html: '<div>Scoreboard</div>',
               x: 960,
               y: 540,
               width: 420,
               height: 380,
               componentType: 'SCOREBOARD',
               config: {
-                title: 'Papan Skor Kelompok',
+                title: 'Team scoreboard',
                 teams: [{ name: args.teamName, score: Math.max(0, args.deltaScore) }]
               }
             };
@@ -1072,8 +1000,11 @@ ${jevDirective}
         otherActions.push({ id: `action_${Date.now()}_${index}`, type: actionType, payload, status: 'PENDING' });
       });
 
-      // Stage 4: Enqueue in correct order — shapes first, then connections, then everything else
-      [...shapeActions, ...pathActions, ...otherActions].forEach(a => addAction(a));
+      // Grid anchors remain useful for text and explicit MOVE_TO_GRID. New cards
+      // are sized/placed together instead of repeatedly sharing those anchors.
+      const actions = layoutCardActions([...shapeActions, ...pathActions, ...otherActions], getBoardLayoutContext(canvas, useStore.getState().domElements));
+      // One queue publication ensures the processor sees the complete turn.
+      useStore.setState(state => ({ actionQueue: [...state.actionQueue, ...actions] }));
 
     } catch (error: any) {
       if (error?.name === 'AbortError' || error?.message?.includes('dibatalkan') || !useStore.getState().isThinking) {
@@ -1083,17 +1014,18 @@ ${jevDirective}
 
       logger.error('Failed to process prompt', error);
 
-      let errorMsg = 'Sinkronisasi kognitif gagal. Coba lagi atau periksa koneksi AI.';
+      let errorMsg = 'Unable to update the board. Try again or check the AI connection.';
       if (error instanceof AiServiceError) {
         errorMsg = error.message;
       } else if (error.message?.includes('Ollama Error')) {
-        errorMsg = `Kesalahan AI Lokal: ${error.message.replace('Ollama Error: ', '')}`;
-        if (error.message.includes('memory')) errorMsg += ' (Sistem kehabisan RAM)';
+        errorMsg = `Local AI error: ${error.message.replace('Ollama Error: ', '')}`;
+        if (error.message.includes('memory')) errorMsg += ' (Not enough system memory)';
       }
 
-      addMessage({ role: 'model', text: errorMsg });
+      const localizedError = localizeWarning(errorMsg, useStore.getState().warningLanguage);
+      addMessage({ role: 'model', text: localizedError });
       addLog(`AI error: ${errorMsg}`);
-      setAgentMessage(errorMsg);
+      setAgentMessage(localizedError);
     } finally {
       useStore.getState().setTaskAbortController(null);
       setThinking(false);

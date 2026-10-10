@@ -28,50 +28,51 @@ const FONTS: { value: FontFamily; label: string }[] = [
 ];
 
 const ALL_SHAPES: { tool: CreatorTool; icon: any; label: string; tKey: string }[] = [
-  { tool: 'RECTANGLE',    icon: Square,        label: 'Kotak', tKey: 'shape_RECTANGLE' },
-  { tool: 'CIRCLE',       icon: Circle,        label: 'Lingkaran', tKey: 'shape_CIRCLE' },
-  { tool: 'TRIANGLE',     icon: Triangle,      label: 'Segitiga', tKey: 'shape_TRIANGLE' },
-  { tool: 'LINE',         icon: Minus,         label: 'Garis', tKey: 'shape_LINE' },
-  { tool: 'ARROW',        icon: MoveRight,     label: 'Panah', tKey: 'shape_ARROW' },
-  { tool: 'STAR',         icon: Star,          label: 'Bintang', tKey: 'shape_STAR' },
-  { tool: 'DIAMOND',      icon: Diamond,       label: 'Berlian', tKey: 'shape_DIAMOND' },
-  { tool: 'HEART',        icon: Heart,         label: 'Hati', tKey: 'shape_HEART' },
+  { tool: 'RECTANGLE',    icon: Square,        label: 'Rectangle', tKey: 'shape_RECTANGLE' },
+  { tool: 'CIRCLE',       icon: Circle,        label: 'Circle', tKey: 'shape_CIRCLE' },
+  { tool: 'TRIANGLE',     icon: Triangle,      label: 'Triangle', tKey: 'shape_TRIANGLE' },
+  { tool: 'LINE',         icon: Minus,         label: 'Line', tKey: 'shape_LINE' },
+  { tool: 'ARROW',        icon: MoveRight,     label: 'Arrow', tKey: 'shape_ARROW' },
+  { tool: 'STAR',         icon: Star,          label: 'Star', tKey: 'shape_STAR' },
+  { tool: 'DIAMOND',      icon: Diamond,       label: 'Diamond', tKey: 'shape_DIAMOND' },
+  { tool: 'HEART',        icon: Heart,         label: 'Heart', tKey: 'shape_HEART' },
   { tool: 'PENTAGON',     icon: Pentagon,      label: 'Pentagon', tKey: 'shape_PENTAGON' },
-  { tool: 'POLYGON',      icon: Hexagon,       label: 'Heksagon', tKey: 'shape_POLYGON' },
-  { tool: 'SPEECH_BUBBLE',icon: MessageSquare, label: 'Balon Kata', tKey: 'shape_SPEECH_BUBBLE' },
+  { tool: 'POLYGON',      icon: Hexagon,       label: 'Hexagon', tKey: 'shape_POLYGON' },
+  { tool: 'SPEECH_BUBBLE',icon: MessageSquare, label: 'Speech bubble', tKey: 'shape_SPEECH_BUBBLE' },
 ];
 
 const APPS = [
-  { label: 'Kalkulator', icon: Calculator,  key: 'toggleCalculator' as const, tKey: 'app_Calculator' },
+  { label: 'Calculator', icon: Calculator,  key: 'toggleCalculator' as const, tKey: 'app_Calculator' },
   { label: 'Timer',      icon: Clock,       key: 'toggleTimer' as const, tKey: 'app_Timer' },
-  { label: 'Catatan',    icon: FileText,    key: 'toggleNotes' as const, tKey: 'app_Notes' },
-  { label: 'Kuis AI',   icon: HelpCircle,  key: 'toggleQuiz' as const, tKey: 'app_Quiz' },
-  { label: 'Konversi',   icon: Activity,    key: 'toggleUnitConverter' as const, tKey: 'app_Conversion' },
-  { label: 'Periodik',   icon: FlaskConical,key: 'togglePeriodicTable' as const, tKey: 'app_Periodic' },
-  { label: 'Presensi',   icon: Users,       key: 'toggleAttendance' as const, tKey: 'app_Attendance' },
+  { label: 'Notes',      icon: FileText,    key: 'toggleNotes' as const, tKey: 'app_Notes' },
+  { label: 'AI quiz',    icon: HelpCircle,  key: 'toggleQuiz' as const, tKey: 'app_Quiz' },
+  { label: 'Conversion', icon: Activity,    key: 'toggleUnitConverter' as const, tKey: 'app_Conversion' },
+  { label: 'Periodic table', icon: FlaskConical,key: 'togglePeriodicTable' as const, tKey: 'app_Periodic' },
+  { label: 'Attendance', icon: Users,       key: 'toggleAttendance' as const, tKey: 'app_Attendance' },
   { label: 'To-Do',      icon: CheckSquare, key: 'toggleTodoList' as const, tKey: 'app_Todo' },
-  { label: 'Roda Acak',  icon: Dices,       key: 'toggleSpinWheel' as const, tKey: 'app_SpinWheel' },
-  { label: 'Papan Skor', icon: Trophy,      key: 'toggleScoreboard' as const, tKey: 'app_Scoreboard' },
-  { label: 'Grafik MTK', icon: FunctionSquare, key: 'toggleMathGraph' as const, tKey: 'app_MathGraph' },
+  { label: 'Random picker', icon: Dices,    key: 'toggleSpinWheel' as const, tKey: 'app_SpinWheel' },
+  { label: 'Scoreboard', icon: Trophy,      key: 'toggleScoreboard' as const, tKey: 'app_Scoreboard' },
+  { label: 'Math graph', icon: FunctionSquare, key: 'toggleMathGraph' as const, tKey: 'app_MathGraph' },
 ];
 
 type PanelId = 'draw' | 'shapes' | 'text' | 'apps';
 
 interface FlyoutProps { open: boolean; children: React.ReactNode; align?: 'top' | 'bottom' | 'center'; }
 const Flyout: React.FC<FlyoutProps> = ({ open, children, align = 'top' }) => {
-  let positionClass = 'top-0';
-  if (align === 'bottom') positionClass = 'bottom-0';
-  if (align === 'center') positionClass = 'top-1/2 -translate-y-1/2';
+  let positionClass = 'md:top-0 md:bottom-auto';
+  if (align === 'bottom') positionClass = 'md:top-auto md:bottom-0';
+  if (align === 'center') positionClass = 'md:top-1/2 md:bottom-auto md:-translate-y-1/2';
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div
+          data-board-occluder="true"
           initial={{ opacity: 0, x: -8, scale: 0.94 }}
           animate={{ opacity: 1, x: 0, scale: 1 }}
           exit={{ opacity: 0, x: -8, scale: 0.94 }}
           transition={{ type: 'spring', stiffness: 420, damping: 30 }}
-          className={`absolute left-full ml-3.5 z-50 bg-white/95 backdrop-blur-2xl border-2 border-[#1550aa]/15 shadow-2xl shadow-slate-900/10 rounded-[1.75rem] p-3.5 w-56 ${positionClass}`}
+          className={`fixed left-4 bottom-44 max-h-[60vh] overflow-auto md:absolute md:left-full md:ml-3.5 z-50 bg-white/95 backdrop-blur-2xl border-2 border-[#1550aa]/15 shadow-2xl shadow-slate-900/10 rounded-[1.75rem] p-3.5 w-56 ${positionClass}`}
         >
           {children}
         </motion.div>
@@ -172,24 +173,25 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         />
       )}
 
-      <div className="absolute left-2 lg:left-4 top-1/2 -translate-y-1/2 pointer-events-auto z-50">
+      <div data-board-occluder="true" className="absolute left-1/2 bottom-28 -translate-x-1/2 md:left-2 lg:left-4 md:bottom-auto md:top-1/2 md:translate-x-0 md:-translate-y-1/2 pointer-events-auto z-50">
         {/* ── Vertical Pill (Only 6 Clustered Buttons) ── */}
         <motion.div
+          data-board-occluder="true"
           initial={{ opacity: 0, x: -14 }}
           animate={{ opacity: 1, x: 0 }}
-          className="relative flex flex-col items-center gap-1.5 bg-white/95 backdrop-blur-2xl border-2 border-[#1550aa]/15 shadow-xl shadow-slate-900/10 rounded-full p-2"
+          className="relative flex flex-row md:flex-col items-center gap-1.5 bg-white/95 backdrop-blur-2xl border-2 border-[#1550aa]/15 shadow-xl shadow-slate-900/10 rounded-full p-2"
         >
           {/* 1. SELECT */}
-          <Btn icon={MousePointer2} active={activeTool === 'SELECT'} title={`${t('selectElement', 'Pilih Elemen')} (V)`} onClick={() => { setActiveTool('SELECT'); close(); }} />
+          <Btn icon={MousePointer2} active={activeTool === 'SELECT'} title={`${t('selectElement', 'Select element')} (V)`} onClick={() => { setActiveTool('SELECT'); close(); }} />
 
-          <div className="w-5 h-px bg-[#0a1a3a]/10" />
+          <div className="w-px h-5 md:w-5 md:h-px bg-[#0a1a3a]/10" />
 
           {/* 2. DRAWING (Pencil, Eraser, Colors, Thickness combined) */}
           <div className="relative">
             <Btn
               icon={activeTool === 'ERASER' ? Eraser : Pencil}
               active={openPanel === 'draw' || isDrawingMode}
-              title={`${t('scribbleAndEraser', 'Coret & Hapus')} (P)`}
+              title={`${t('scribbleAndEraser', 'Draw & erase')} (P)`}
               onClick={() => {
                 if (!isDrawingMode) {
                   setActiveTool('PENCIL');
@@ -216,11 +218,11 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
                   activeTool === 'ERASER' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                <Eraser size={12} /> {t('eraser', 'Penghapus')}
+                <Eraser size={12} /> {t('eraser', 'Eraser')}
               </button>
             </div>
 
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('colorOptions', 'Pilihan Warna')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('colorOptions', 'Colours')}</div>
             <div className="grid grid-cols-6 gap-1 mb-2">
               {PALETTE.map(c => (
                 <button
@@ -240,7 +242,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               className="w-full h-8 rounded-lg cursor-pointer border border-slate-200 mb-3"
             />
 
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{t('brushThickness', 'Ketebalan Brush')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{t('brushThickness', 'Brush thickness')}</div>
             <div className="flex gap-1">
               {BRUSH_SIZES.map(s => (
                 <button
@@ -265,13 +267,13 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           <Btn
             icon={ShapeIcon}
             active={openPanel === 'shapes' || !!activeShape}
-            title={`${t('shapesAndLines', 'Bentuk & Garis')} (R)`}
+            title={`${t('shapesAndLines', 'Shapes & lines')} (R)`}
             onClick={() => toggle('shapes')}
           >
             <ChevronRight size={7} className="absolute right-0.5 bottom-0.5 opacity-50" />
           </Btn>
           <Flyout open={openPanel === 'shapes'} align="center">
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('selectShape', 'Pilih Bentuk')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('selectShape', 'Choose a shape')}</div>
             <div className="grid grid-cols-4 gap-1.5 mb-3">
               {ALL_SHAPES.map(s => (
                 <motion.button
@@ -287,7 +289,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
                 </motion.button>
               ))}
             </div>
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{t('fillStyle', 'Gaya Isian')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">{t('fillStyle', 'Fill style')}</div>
             <button
               onClick={() => setShapeFilled(!isShapeFilled)}
               className={`w-full flex items-center justify-center gap-2 py-1.5 rounded-lg text-xs font-bold transition-colors ${
@@ -295,7 +297,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
               }`}
             >
               <PaintBucket size={12} />
-              {isShapeFilled ? t('fillActive', 'Isian Aktif') : t('outlineOnly', 'Garis Tepi Saja')}
+              {isShapeFilled ? t('fillActive', 'Filled') : t('outlineOnly', 'Outline only')}
             </button>
           </Flyout>
         </div>
@@ -305,7 +307,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
           <Btn
             icon={Type}
             active={openPanel === 'text' || activeTool === 'TEXT'}
-            title={`${t('textAndTypography', 'Teks & Tipografi')} (T)`}
+            title={`${t('textAndTypography', 'Text & typography')} (T)`}
             onClick={() => {
               if (activeTool !== 'TEXT') {
                 setActiveTool('TEXT');
@@ -316,7 +318,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
             <ChevronRight size={7} className="absolute right-0.5 bottom-0.5 opacity-50" />
           </Btn>
           <Flyout open={openPanel === 'text'} align="center">
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('fontStyle', 'Gaya Huruf')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('fontStyle', 'Font style')}</div>
             {FONTS.map(f => (
               <button
                 key={f.value}
@@ -329,7 +331,7 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
                 {f.label}
               </button>
             ))}
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-3 mb-1.5">{t('textSize', 'Ukuran Teks')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mt-3 mb-1.5">{t('textSize', 'Text size')}</div>
             <div className="flex gap-1 flex-wrap">
               {[14, 20, 28, 40, 56].map(s => (
                 <button
@@ -347,15 +349,15 @@ export const DrawingToolbar: React.FC<DrawingToolbarProps> = ({
         </div>
 
         {/* 5. IMAGE */}
-        <Btn icon={ImageIcon} title={t('insertImage', 'Sisipkan Gambar')} onClick={onImageUpload} />
+        <Btn icon={ImageIcon} title={t('insertImage', 'Insert image')} onClick={onImageUpload} />
 
-        <div className="w-5 h-px bg-slate-200/80" />
+        <div className="w-px h-5 md:w-5 md:h-px bg-slate-200/80" />
 
         {/* 6. APPS & WIDGETS */}
         <div className="relative">
-          <Btn icon={MoreHorizontal} active={openPanel === 'apps'} title={t('toolsAndApps', 'Alat & Aplikasi')} onClick={() => toggle('apps')} />
+          <Btn icon={MoreHorizontal} active={openPanel === 'apps'} title={t('toolsAndApps', 'Tools & apps')} onClick={() => toggle('apps')} />
           <Flyout open={openPanel === 'apps'} align="bottom">
-            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('classToolsAndWidgets', 'Alat Kelas & Widget')}</div>
+            <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2">{t('classToolsAndWidgets', 'Classroom tools & widgets')}</div>
             <div className="grid grid-cols-2 gap-1.5">
               {APPS.map(app => (
                 <button

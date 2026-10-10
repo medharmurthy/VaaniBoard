@@ -3,9 +3,11 @@ import { CONFIG } from '../constants';
 import { useStore } from '../store';
 
 export interface AiStatus {
-  mode: 'gemini' | 'ollama' | 'vertex' | 'unavailable';
+  mode: 'cline' | 'gemini' | 'ollama' | 'vertex' | 'sarvam' | 'unavailable';
   model: string;
   online: boolean;
+  verified?: boolean;
+  message?: string;
   reason?: string;
   checkedAt?: number;
   ollamaStatus?: { online: boolean; hasModel: boolean; models: string[]; activeModel?: string };
@@ -22,7 +24,10 @@ export const useAiStatus = () => {
   });
 
   useEffect(() => {
+    let alive = true;
+    let latestRequest = 0;
     const fetchStatus = async () => {
+      const request = ++latestRequest;
       try {
         const apiUrl = (import.meta as any).env.VITE_API_URL || '';
         const res = await fetch(`${apiUrl}/api/ai/status`, {
@@ -33,23 +38,26 @@ export const useAiStatus = () => {
 
         if (res.ok) {
           const data = await res.json();
-          setStatus({ ...data, checkedAt: Date.now() });
+          if (alive && request === latestRequest) setStatus({ ...data, checkedAt: Date.now() });
         } else {
-          setStatus(s => ({ ...s, online: false, mode: 'unavailable', reason: `http_${res.status}`, checkedAt: Date.now() }));
+          if (alive && request === latestRequest) setStatus(s => ({ ...s, online: false, mode: 'unavailable', reason: `http_${res.status}`, checkedAt: Date.now() }));
         }
       } catch (e) {
-        setStatus(s => ({ ...s, online: false, mode: 'unavailable', reason: 'network', checkedAt: Date.now() }));
+        if (alive && request === latestRequest) setStatus(s => ({ ...s, online: false, mode: 'unavailable', reason: 'network', checkedAt: Date.now() }));
       }
     };
 
     fetchStatus();
     window.addEventListener('online', fetchStatus);
     window.addEventListener('offline', fetchStatus);
+    window.addEventListener('vaani:ai-health-changed', fetchStatus);
     const interval = setInterval(fetchStatus, CONFIG.ui.aiStatusPollIntervalMs);
     return () => {
+      alive = false;
       clearInterval(interval);
       window.removeEventListener('online', fetchStatus);
       window.removeEventListener('offline', fetchStatus);
+      window.removeEventListener('vaani:ai-health-changed', fetchStatus);
     };
   }, [aiPreference, selectedOllamaModel, selectedGeminiModel, selectedVertexModel, geminiApiKey, ollamaBaseUrl]);
 

@@ -1,8 +1,11 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { Download, Copy, RefreshCw, ZoomIn, ZoomOut, Check, AlertCircle, Edit3, Eye, Sparkles, Brain, GitBranch } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { getLanguageProfile } from '../utils/languages';
+import { Download, Copy, RefreshCw, ZoomIn, ZoomOut, Check, AlertCircle, Edit3, Eye, Sparkles } from 'lucide-react';
 import { toast } from '../utils/toast';
 import { downloadFile, slugify } from '../utils/smartExport';
 import { useStore } from '../store';
+import { needsMermaidLabelQuotes, quoteMermaidLabel, validateMermaidCode } from '../utils/mermaidCode';
+import { localizeWarning, warningText } from '../utils/warningLanguage';
 
 interface MermaidToolProps {
   id?: string;
@@ -14,49 +17,34 @@ interface MermaidToolProps {
 }
 
 export const DEFAULT_MINDMAP = `mindmap
-  root((Sistem Peredaran Darah))
-    Jantung
-      Atrium Kiri & Kanan
-      Ventrikel Kiri & Kanan
-      Katup Jantung
-    Pembuluh Darah
-      Arteri (Nadi)
-      Vena (Balik)
-      Kapiler
-    Darah
-      Sel Darah Merah (Eritrosit)
-      Sel Darah Putih (Leukosit)
-      Keping Darah (Trombosit)
-      Plasma Darah`;
+  root((Lesson topic))
+    Key idea
+    Example
+    Practice`;
 
 export const DEFAULT_FLOWCHART = `flowchart TD
-  A([Matahari]) -->|Fotosintesis| B[Tumbuhan Hijau / Produsen]
-  B -->|Dimakan| C[Konsumen I / Herbivora]
-  C -->|Dimakan| D[Konsumen II / Karnivora]
-  D -->|Mati| E[Pengurai / Dekomposer]
-  E -->|Unsur Hara| B
-  style A fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
-  style B fill:#dcfce7,stroke:#10b981,stroke-width:2px
-  style C fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
-  style D fill:#fee2e2,stroke:#ef4444,stroke-width:2px
-  style E fill:#f3f4f6,stroke:#6b7280,stroke-width:2px`;
+  A[Start] --> B[Step one]
+  B --> C[Step two]
+  C --> D[Finish]`;
 
 /**
  * Robust converter from markdown hierarchical bullet lists / headings
  * into valid Mermaid mindmap syntax.
  */
-export function markdownToMermaidMindmap(md: string, fallbackTitle = 'Peta Konsep'): string {
+export function markdownToMermaidMindmap(md: string, fallbackTitle = 'Concept map'): string {
   const lines = md.split('\n');
   const result: string[] = ['mindmap'];
   let rootSet = false;
   let rootTitle = fallbackTitle;
   let currentHeadingLevel = 1;
+  let nodeIndex = 0;
 
   const sanitizeNode = (str: string): string => {
-    // Remove characters that conflict with Mermaid syntax
-    const clean = str.replace(/["'()\[\]{}]/g, '').trim();
-    return clean || 'Node';
+    return str.trim() || 'Node';
   };
+  const rootNode = (text: string) => `  root((${needsMermaidLabelQuotes(text) ? quoteMermaidLabel(text) : text}))`;
+  const branchNode = (text: string) => needsMermaidLabelQuotes(text) ? `node${++nodeIndex}[${quoteMermaidLabel(text)}]` : text;
+  rootTitle = sanitizeNode(rootTitle);
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -71,16 +59,16 @@ export function markdownToMermaidMindmap(md: string, fallbackTitle = 'Peta Konse
         if (level === 1 && !rootSet) {
           rootTitle = text;
           rootSet = true;
-          result.push(`  root((${rootTitle}))`);
+          result.push(rootNode(rootTitle));
           currentHeadingLevel = 1;
         } else {
           if (!rootSet) {
             rootSet = true;
-            result.push(`  root((${rootTitle}))`);
+            result.push(rootNode(rootTitle));
           }
           currentHeadingLevel = level;
           const indent = '  '.repeat(Math.max(2, level));
-          result.push(`${indent}${text}`);
+          result.push(`${indent}${branchNode(text)}`);
         }
         continue;
       }
@@ -91,20 +79,20 @@ export function markdownToMermaidMindmap(md: string, fallbackTitle = 'Peta Konse
     if (bulletMatch) {
       if (!rootSet) {
         rootSet = true;
-        result.push(`  root((${rootTitle}))`);
+        result.push(rootNode(rootTitle));
       }
       const rawSpaces = bulletMatch[1].replace(/\t/g, '  ').length;
       const bulletDepth = Math.floor(rawSpaces / 2);
       const effectiveLevel = currentHeadingLevel + 1 + bulletDepth;
       const text = sanitizeNode(bulletMatch[2]);
       const indent = '  '.repeat(Math.max(2, effectiveLevel));
-      result.push(`${indent}${text}`);
+      result.push(`${indent}${branchNode(text)}`);
       continue;
     }
   }
 
   if (!rootSet) {
-    result.push(`  root((${rootTitle}))`);
+    result.push(rootNode(rootTitle));
   }
 
   return result.join('\n');
@@ -126,55 +114,54 @@ function getMermaidInstance(): Promise<any> {
       }
 
       const script = document.createElement('script');
+      const timeout = window.setTimeout(() => {
+        script.remove();
+        reject(new Error('The local Mermaid renderer took too long to load. Reload the board or try again.'));
+      }, 10000);
       script.src = '/vendor/mermaid.min.js';
       script.async = true;
       script.onload = () => {
+        window.clearTimeout(timeout);
         if ((window as any).mermaid) {
           resolve((window as any).mermaid);
         } else {
-          loadCdnFallback(resolve, reject);
+          reject(new Error('The local Mermaid renderer did not initialize. Reload the board or check that /vendor/mermaid.min.js is available.'));
         }
       };
       script.onerror = () => {
-        loadCdnFallback(resolve, reject);
+        window.clearTimeout(timeout);
+        script.remove();
+        reject(new Error('The local Mermaid renderer could not load. Reload the board or check that /vendor/mermaid.min.js is available.'));
       };
       document.head.appendChild(script);
-    });
+    }).catch(error => { mermaidPromise = null; throw error; });
   }
 
   return mermaidPromise;
 }
 
-function loadCdnFallback(resolve: (val: any) => void, reject: (err: any) => void) {
-  const cdn = document.createElement('script');
-  cdn.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-  cdn.async = true;
-  cdn.onload = () => {
-    if ((window as any).mermaid) resolve((window as any).mermaid);
-    else reject(new Error('Mermaid CDN failed to initialize'));
-  };
-  cdn.onerror = (e) => reject(e);
-  document.head.appendChild(cdn);
-}
-
 export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const boardLanguage = useStore(state => state.boardLanguage);
+  const warningLanguage = useStore(state => state.warningLanguage);
   const [svgHtml, setSvgHtml] = useState<string>('');
+  const [renderedCode, setRenderedCode] = useState('');
+  const [repairNotice, setRepairNotice] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [retryKey, setRetryKey] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   
-  // Resolve code: prioritize config.code, then convert config.markdown, then fallback to DEFAULT_MINDMAP
+  // Missing content is an error, never an unrelated sample diagram.
   const resolvedInitialCode = useMemo(() => {
     if (config.code && config.code.trim()) {
       return config.code.trim();
     }
     if (config.markdown && config.markdown.trim()) {
-      return markdownToMermaidMindmap(config.markdown, config.title || 'Peta Konsep');
+      return markdownToMermaidMindmap(config.markdown, config.title || 'Concept map');
     }
-    return DEFAULT_MINDMAP;
+    return '';
   }, [config.code, config.markdown, config.title]);
 
   const [activeCode, setActiveCode] = useState(resolvedInitialCode);
@@ -183,15 +170,10 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
     setActiveCode(resolvedInitialCode);
   }, [resolvedInitialCode]);
 
-  const title = config.title || 'Diagram Mermaid';
+  const title = config.title || 'Concept chart';
 
   const isMindmap = useMemo(() => {
     return activeCode.trim().startsWith('mindmap');
-  }, [activeCode]);
-
-  const isFlowchart = useMemo(() => {
-    const c = activeCode.trim();
-    return c.startsWith('flowchart') || c.startsWith('graph');
   }, [activeCode]);
 
   // Render diagram on change
@@ -200,8 +182,13 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
     const renderDiagram = async () => {
       try {
         setError(null);
+        setSvgHtml('');
+        setRenderedCode('');
+        setRepairNotice(false);
+        setIsLoading(true);
+        if(!activeCode.trim())throw new Error('No chart content was provided. Ask for the concept map or flowchart again.');
         const mm = await getMermaidInstance();
-        if (!mm) throw new Error('Engine Mermaid belum siap dimuat');
+        if (!mm) throw new Error('The Mermaid renderer is not ready. Reload the board and try again.');
 
         mm.initialize({
           startOnLoad: false,
@@ -213,24 +200,30 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
             lineColor: '#818cf8',
             secondaryColor: '#ec4899',
             tertiaryColor: '#10b981',
-            fontFamily: 'Inter, system-ui, sans-serif'
+            fontFamily: getLanguageProfile(boardLanguage).font
           } : {
-            fontFamily: 'Inter, system-ui, sans-serif'
+            fontFamily: getLanguageProfile(boardLanguage).font
           },
-          securityLevel: 'loose',
-          fontFamily: 'Inter, system-ui, sans-serif'
+          securityLevel: 'strict',
+          fontFamily: getLanguageProfile(boardLanguage).font,
+          suppressErrorRendering: true
         });
 
+        const validated = await validateMermaidCode(activeCode, mm);
         const uniqueId = `mermaid_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-        const { svg } = await mm.render(uniqueId, activeCode);
+        const { svg } = await mm.render(uniqueId, validated.code);
         if (isMounted) {
           setSvgHtml(svg);
+          setRenderedCode(validated.code);
+          setRepairNotice(validated.repaired);
         }
       } catch (err: any) {
         console.error('Mermaid render error:', err);
         if (isMounted) {
-          setError(err?.message || 'Sintaks Mermaid tidak valid');
+          setError(err?.message || 'Invalid Mermaid syntax. Open the editor to check labels, brackets and arrows.');
         }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
 
@@ -238,28 +231,32 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
     return () => {
       isMounted = false;
     };
-  }, [activeCode, retryKey, isMindmap]);
+  }, [activeCode, retryKey, isMindmap, boardLanguage]);
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(activeCode);
-    setCopied(true);
-    toast.success('Kode Mermaid berhasil disalin.');
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(renderedCode || activeCode);
+      setCopied(true);
+      toast.success('Mermaid code copied.');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Could not copy code. Open the editor to select and copy the Mermaid source.');
+    }
   };
 
   const handleExportSvg = () => {
     if (!svgHtml) return;
     downloadFile(svgHtml, `${slugify(title)}_mermaid.svg`, 'image/svg+xml;charset=utf-8');
-    toast.success('Vektor SVG diagram berhasil diunduh.');
+    toast.success('Diagram SVG downloaded.');
   };
 
   const handleSaveCodeEdit = () => {
     setIsEditing(false);
     if (id) {
       useStore.getState().updateDomElement(id, {
-        config: { ...config, code: activeCode }
+        config: { ...config, code: renderedCode || activeCode }
       });
-      toast.success('Diagram Mermaid diperbarui.');
+      toast.success('Mermaid diagram updated.');
     }
   };
 
@@ -274,54 +271,56 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
   };
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#fafafa] text-slate-800 overflow-hidden font-sans select-none relative">
+    <div className="flex flex-col w-full h-full min-w-0 bg-[#fafafa] text-slate-800 overflow-hidden font-sans select-none relative" aria-busy={isLoading}>
       {/* Code Editor Drawer */}
       {isEditing && (
         <div className="bg-slate-900 text-slate-100 p-3 border-b border-slate-800 text-xs flex flex-col gap-2 shrink-0 z-30">
           <div className="flex items-center justify-between">
             <span className="font-mono text-[11px] text-slate-400 flex items-center gap-1.5">
-              <Sparkles size={12} className="text-indigo-400" /> Editor Kode Mermaid:
+              <Sparkles size={12} className="text-indigo-400" /> Mermaid code editor
             </span>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleSwitchToMindmapTemplate}
                 className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-indigo-300 transition cursor-pointer"
               >
-                Template Mindmap
+                Concept map template
               </button>
               <button
                 onClick={handleSwitchToFlowchartTemplate}
                 className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-emerald-300 transition cursor-pointer"
               >
-                Template Flowchart
+                Flowchart template
               </button>
               <button
                 onClick={handleSaveCodeEdit}
                 className="px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition cursor-pointer flex items-center gap-1"
               >
-                <Check size={11} /> Terapkan
+                <Check size={11} /> Apply
               </button>
             </div>
           </div>
           <textarea
             value={activeCode}
+            aria-label={warningText('editCode', warningLanguage)}
             onChange={(e) => setActiveCode(e.target.value)}
             rows={5}
             className="w-full bg-slate-950 font-mono text-[11px] p-2.5 rounded-xl border border-slate-700 focus:outline-none focus:border-indigo-500 text-slate-200 resize-y"
-            placeholder="mindmap&#10;  root((Judul))&#10;    Cabang 1&#10;      Detail A"
+            placeholder="mindmap&#10;  root((Lesson topic))&#10;    Key idea&#10;      Example"
           />
         </div>
       )}
 
       {/* Main Diagram Canvas Area */}
-      <div ref={containerRef} className="flex-1 w-full h-full relative overflow-auto p-6 flex items-center justify-center bg-white/70">
+      {repairNotice && <div role="status" data-engine="local" className="px-3 py-1.5 text-xs text-indigo-800 bg-indigo-50 border-b border-indigo-100">Chart labels repaired locally. Copy code to keep the corrected Mermaid source.</div>}
+      <div className="flex-1 min-h-0 w-full relative overflow-auto p-4 pb-14 flex items-center justify-center bg-white/70">
         {error ? (
-          <div className="max-w-md p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs flex flex-col gap-2.5">
+          <div role="alert" className="max-w-full max-h-full overflow-auto p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs flex flex-col gap-2.5 select-text">
             <div className="flex items-start gap-2">
               <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" />
               <div>
-                <div className="font-bold mb-0.5">Gagal merender diagram Mermaid:</div>
-                <div className="font-mono text-[11px] opacity-90 break-all">{error}</div>
+                <div className="font-bold mb-0.5">{warningText('diagramError', warningLanguage)}</div>
+                <div className="font-mono text-[11px] opacity-90 break-words whitespace-pre-wrap">{localizeWarning(error, warningLanguage)}</div>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2">
@@ -329,18 +328,24 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
                 onClick={() => setIsEditing(true)}
                 className="px-3 py-1 bg-white hover:bg-indigo-50 border border-indigo-300 text-indigo-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
               >
-                <Edit3 size={12} /> Buka Editor
+                <Edit3 size={12} /> {warningText('openEditor', warningLanguage)}
               </button>
               <button
                 onClick={() => setRetryKey(k => k + 1)}
                 className="px-3 py-1 bg-white hover:bg-rose-100 border border-rose-300 text-rose-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
               >
-                <RefreshCw size={12} /> Coba Lagi
+                <RefreshCw size={12} /> {warningText('retry', warningLanguage)}
               </button>
             </div>
+            <details>
+              <summary className="cursor-pointer font-semibold">View chart source</summary>
+              <pre className="mt-2 p-2 bg-white border border-rose-100 rounded overflow-auto whitespace-pre-wrap break-words">{activeCode || 'No Mermaid code provided.'}</pre>
+            </details>
           </div>
-        ) : (
+        ) : isLoading ? <div role="status" className="text-sm text-slate-600">Rendering chart locally…</div> : (
           <div
+            role="img"
+            aria-label={title}
             style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
             dangerouslySetInnerHTML={{ __html: svgHtml }}
             className="max-w-full flex items-center justify-center"
@@ -355,30 +360,34 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
           className={`p-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition cursor-pointer ${
             isEditing ? 'bg-indigo-100 text-indigo-700' : 'text-slate-600 hover:bg-slate-100'
           }`}
-          title="Edit Kode Mermaid"
+          title={warningText('editCode', warningLanguage)}
+          aria-label={isEditing ? warningText('preview', warningLanguage) : warningText('editCode', warningLanguage)}
         >
           {isEditing ? <Eye size={13} /> : <Edit3 size={13} />}
-          <span className="text-[11px]">{isEditing ? 'Lihat' : 'Edit'}</span>
+          <span className="text-[11px]">{isEditing ? warningText('preview', warningLanguage) : 'Edit'}</span>
         </button>
         <div className="w-[1px] h-3.5 bg-slate-200 mx-0.5" />
         <button
           onClick={() => setZoom(z => Math.max(0.4, z - 0.15))}
           className="p-1 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
-          title="Perkecil"
+          title={warningText('zoomOut', warningLanguage)}
+          aria-label={warningText('zoomOut', warningLanguage)}
         >
           <ZoomOut size={13} />
         </button>
         <button
           onClick={() => setZoom(1)}
           className="px-1.5 py-0.5 text-[10px] font-bold font-mono text-slate-600 hover:bg-slate-100 rounded transition cursor-pointer"
-          title="Reset Zoom (100%)"
+          title="Reset zoom (100%)"
+          aria-label="Reset zoom (100%)"
         >
           {Math.round(zoom * 100)}%
         </button>
         <button
           onClick={() => setZoom(z => Math.min(2.5, z + 0.15))}
           className="p-1 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
-          title="Perbesar"
+          title={warningText('zoomIn', warningLanguage)}
+          aria-label={warningText('zoomIn', warningLanguage)}
         >
           <ZoomIn size={13} />
         </button>
@@ -386,14 +395,17 @@ export const MermaidTool: React.FC<MermaidToolProps> = ({ id, config }) => {
         <button
           onClick={handleCopyCode}
           className="p-1 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
-          title="Salin Kode Mermaid"
+          title={warningText('copyCode', warningLanguage)}
+          aria-label={warningText('copyCode', warningLanguage)}
         >
           {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
         </button>
         <button
           onClick={handleExportSvg}
           className="p-1 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
-          title="Unduh Vektor SVG"
+          title={warningText('downloadSvg', warningLanguage)}
+          aria-label={warningText('downloadSvg', warningLanguage)}
+          disabled={!svgHtml || !!error || isLoading}
         >
           <Download size={13} />
         </button>

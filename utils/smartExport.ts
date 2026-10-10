@@ -59,9 +59,9 @@ export function slugify(text: string): string {
  * ── 1. EXPORT CLEAN DOCUMENT AS STANDALONE HTML ─────────────────────────────
  */
 export function exportDocumentAsHtml(title: string, markdown: string) {
-  const cleanTitle = title || 'Dokumen Materi Trido';
+  const cleanTitle = title || 'Vaani Board Lesson Document';
   const htmlContent = `<!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -90,13 +90,13 @@ export function exportDocumentAsHtml(title: string, markdown: string) {
       <div>
         <div class="flex items-center gap-2 mb-2">
           <span class="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Trido Academic Document</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Vaani Board Academic Document</span>
         </div>
         <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 font-sans">${cleanTitle}</h1>
       </div>
       <button onclick="window.print()" class="no-print px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-2 cursor-pointer">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-        Cetak / PDF
+        Print / PDF
       </button>
     </div>
     <div id="content" class="doc-article prose prose-slate max-w-none leading-relaxed text-slate-700"></div>
@@ -116,8 +116,8 @@ export function exportDocumentAsHtml(title: string, markdown: string) {
  * ── 2. EXPORT CLEAN DOCUMENT AS RAW MARKDOWN ───────────────────────────────
  */
 export function exportDocumentAsMarkdown(title: string, markdown: string) {
-  const cleanTitle = title || 'Dokumen Materi Trido';
-  const header = `# ${cleanTitle}\n*Diekspor dari Trido Whiteboard - ${new Date().toLocaleDateString('id-ID')}*\n\n---\n\n`;
+  const cleanTitle = title || 'Vaani Board Lesson Document';
+  const header = `# ${cleanTitle}\n*Exported from Vaani Board - ${new Date().toLocaleDateString('en-IN')}*\n\n---\n\n`;
   downloadFile(header + (markdown || ''), `${slugify(cleanTitle)}.md`, 'text/markdown;charset=utf-8');
 }
 
@@ -161,9 +161,9 @@ export function exportInteractiveAppAsHtml(config: {
   css?: string;
   js?: string;
 }) {
-  const cleanTitle = config.title || 'Trido Interactive App';
+  const cleanTitle = config.title || 'Vaani Board Interactive App';
   const fullHtml = `<!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -186,7 +186,7 @@ export function exportInteractiveAppAsHtml(config: {
       <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></div>
       <span class="font-bold text-slate-200 tracking-wide">${cleanTitle}</span>
     </div>
-    <span class="text-slate-500 text-[11px] font-mono">Standalone Web Application • Exported from Trido</span>
+    <span class="text-slate-500 text-[11px] font-mono">Standalone Web Application • Exported from Vaani Board</span>
   </header>
 
   <!-- Interactive App Content -->
@@ -219,7 +219,7 @@ export function exportQuizAsPrintableWorksheet(quiz: {
   type?: string;
   config: any;
 }) {
-  const cleanTitle = quiz.title || quiz.config?.title || 'Lembar Soal Latihan Siswa';
+  const cleanTitle = quiz.title || quiz.config?.title || 'Student Practice Worksheet';
   const isMultipleChoice = quiz.type === 'QUIZ_MULTIPLE_CHOICE' || !!quiz.config?.options;
   const isEssay = quiz.type === 'QUIZ_ESSAY' || !!quiz.config?.rubric;
   const isTrueFalse = quiz.type === 'QUIZ_TRUE_FALSE';
@@ -231,7 +231,7 @@ export function exportQuizAsPrintableWorksheet(quiz: {
 <html>
 <head>
   <meta charset="utf-8">
-  <title>${cleanTitle} - Lembar Ujian</title>
+  <title>${cleanTitle} - Test Sheet</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     @page { size: A4; margin: 20mm 15mm; }
@@ -247,37 +247,37 @@ export function exportQuizAsPrintableWorksheet(quiz: {
   <div class="border-b-2 border-slate-900 pb-4 mb-6">
     <div class="flex justify-between items-start mb-3">
       <div>
-        <div class="text-[10px] font-black tracking-widest text-blue-600 uppercase">LEMBAR AKTIVITAS & EVALUASI PEMBELAJARAN</div>
+        <div class="text-[10px] font-black tracking-widest text-blue-600 uppercase">LEARNING ACTIVITY & ASSESSMENT SHEET</div>
         <h1 class="text-2xl font-black text-slate-900 uppercase">${cleanTitle}</h1>
       </div>
       <button onclick="window.print()" class="no-print px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer">
-        Cetak Soal
+        Print Questions
       </button>
     </div>
 
     <!-- Student Metadata Grid -->
     <div class="grid grid-cols-2 gap-x-8 gap-y-2 mt-4 text-xs font-medium text-slate-700 border-t border-slate-200 pt-3">
-      <div>Nama Lengkap : _____________________________________</div>
-      <div>Kelas / No. Presensi : ____________________</div>
-      <div>Mata Pelajaran : _____________________________________</div>
-      <div>Tanggal Ujian : ${new Date().toLocaleDateString('id-ID')}</div>
+      <div>Full Name : _____________________________________</div>
+      <div>Class / Roll No. : ____________________</div>
+      <div>Subject : _____________________________________</div>
+      <div>Test Date : ${new Date().toLocaleDateString('en-IN')}</div>
     </div>
   </div>
 
   <!-- Instructions -->
   <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 text-xs text-slate-600">
-    <strong>Petunjuk Pengerjaan:</strong><br>
-    1. Berdoalah sebelum mengerjakan soal.<br>
-    2. Bacalah setiap pertanyaan dengan teliti sebelum menjawab.<br>
-    3. Kerjakan secara mandiri dan teliti.
+    <strong>Instructions:</strong><br>
+    1. Write your name and roll number before you begin.<br>
+    2. Read every question carefully before answering.<br>
+    3. Work on your own and check your answers.
   </div>
 
   <!-- Question Section -->
   <div class="space-y-6">
     <div class="border border-slate-200 rounded-2xl p-6 bg-white">
-      <div class="text-xs font-black text-blue-600 uppercase tracking-wider mb-2">Soal No. 1</div>
+      <div class="text-xs font-black text-blue-600 uppercase tracking-wider mb-2">Question 1</div>
       <p class="text-base font-semibold text-slate-900 leading-relaxed mb-4">
-        ${quiz.config?.question || 'Jelaskan materi terkait.'}
+        ${quiz.config?.question || 'Explain the related topic.'}
       </p>
 
       ${isMultipleChoice && Array.isArray(quiz.config?.options) ? `
@@ -296,16 +296,16 @@ export function exportQuizAsPrintableWorksheet(quiz: {
 
       ${isTrueFalse ? `
         <div class="flex gap-4 mt-4">
-          <div class="flex-1 p-3 border border-slate-300 rounded-xl text-center font-bold text-sm">[   ] BENAR</div>
-          <div class="flex-1 p-3 border border-slate-300 rounded-xl text-center font-bold text-sm">[   ] SALAH</div>
+          <div class="flex-1 p-3 border border-slate-300 rounded-xl text-center font-bold text-sm">[   ] TRUE</div>
+          <div class="flex-1 p-3 border border-slate-300 rounded-xl text-center font-bold text-sm">[   ] FALSE</div>
         </div>
       ` : ''}
 
       ${isEssay ? `
         <div class="mt-4 pt-4 border-t border-slate-100">
-          <div class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Ruang Jawaban:</div>
+          <div class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">Answer space:</div>
           <div class="h-44 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 p-4 text-xs text-slate-400">
-            (Tuliskan jawaban Anda di sini)
+            (Write your answer here)
           </div>
         </div>
       ` : ''}
@@ -315,19 +315,19 @@ export function exportQuizAsPrintableWorksheet(quiz: {
   <!-- Teacher Answer Key / Solution Section (Collapsible / Print Option) -->
   ${quiz.config?.explanation || quiz.config?.answerIndex !== undefined || quiz.config?.sampleAnswer ? `
     <div class="mt-12 pt-6 border-t-2 border-dashed border-slate-300 page-break-before">
-      <div class="text-xs font-black uppercase tracking-wider text-rose-600 mb-2">KUNCI JAWABAN & PEMBAHASAN (GURU)</div>
+      <div class="text-xs font-black uppercase tracking-wider text-rose-600 mb-2">ANSWER KEY & EXPLANATION (TEACHER)</div>
       <div class="bg-rose-50/70 border border-rose-200 rounded-xl p-4 text-xs text-rose-900 leading-relaxed">
         ${quiz.config?.answerIndex !== undefined && quiz.config?.options ? `
-          <div class="mb-2"><strong>Kunci Jawaban:</strong> Pilihan ${String.fromCharCode(65 + quiz.config.answerIndex)} (${quiz.config.options[quiz.config.answerIndex]})</div>
+          <div class="mb-2"><strong>Answer key:</strong> Option ${String.fromCharCode(65 + quiz.config.answerIndex)} (${quiz.config.options[quiz.config.answerIndex]})</div>
         ` : ''}
         ${quiz.config?.sampleAnswer ? `
-          <div class="mb-2"><strong>Contoh Jawaban Ideal:</strong> ${quiz.config.sampleAnswer}</div>
+          <div class="mb-2"><strong>Model answer:</strong> ${quiz.config.sampleAnswer}</div>
         ` : ''}
         ${quiz.config?.rubric ? `
-          <div class="mb-2"><strong>Rubrik Penilaian:</strong> ${quiz.config.rubric}</div>
+          <div class="mb-2"><strong>Marking rubric:</strong> ${quiz.config.rubric}</div>
         ` : ''}
         ${quiz.config?.explanation ? `
-          <div><strong>Pembahasan:</strong> ${quiz.config.explanation}</div>
+          <div><strong>Explanation:</strong> ${quiz.config.explanation}</div>
         ` : ''}
       </div>
     </div>
@@ -402,14 +402,14 @@ export function detectBoardObjects(
     if (type === 'MARKDOWN_NOTE' || type === 'DOCUMENT_PAGE' || type === 'MARKMAP_MINDMAP' || config.markdown || config.content) {
       documents.push({
         id,
-        title: config.title || (type === 'MARKMAP_MINDMAP' ? 'Peta Konsep Markmap' : 'Dokumen Materi'),
+        title: config.title || (type === 'MARKMAP_MINDMAP' ? 'Markmap Concept Map' : 'Lesson Document'),
         markdown: config.markdown || config.content || '',
         elementNodeId: `widget-${id}`
       });
     } else if (type === 'INTERACTIVE_APP' || type === 'MERMAID_DIAGRAM' || config.html) {
       apps.push({
         id,
-        title: config.title || (type === 'MERMAID_DIAGRAM' ? 'Diagram Mermaid' : 'Aplikasi Web Interaktif'),
+        title: config.title || (type === 'MERMAID_DIAGRAM' ? 'Mermaid Diagram' : 'Interactive Web App'),
         html: config.html || '',
         css: config.css,
         js: config.js
@@ -417,7 +417,7 @@ export function detectBoardObjects(
     } else if (type.startsWith('QUIZ_') || config.options || config.question) {
       quizzes.push({
         id,
-        title: config.title || 'Lembar Kuis & Evaluasi',
+        title: config.title || 'Quiz & Assessment Sheet',
         type,
         config,
         elementNodeId: `widget-${id}`
@@ -436,7 +436,7 @@ export function detectBoardObjects(
     quizzes,
     mindmap: {
       hasNodes: mindmapCount > 0,
-      rootText: rootNode?.text || 'Peta Konsep',
+      rootText: rootNode?.text || 'Concept Map',
       count: mindmapCount
     },
     fabricObjectCount,
@@ -708,12 +708,12 @@ export function exportMindmapToCanvaSVG(
  * ── 13. EXPORT QUIZZES TO GIFT FORMAT (Moodle & Canvas LMS) ────────────────
  */
 export function exportQuizToGIFT(quizzes: any[]): string {
-  let output = `// Kuis Pembelajaran Trido AI\n// Diekspor pada: ${new Date().toLocaleString('id-ID')}\n\n`;
+  let output = `// Vaani Board AI Quiz\n// Exported on: ${new Date().toLocaleString('en-IN')}\n\n`;
 
   quizzes.forEach((q, index) => {
     const cfg = q.config || {};
-    const title = (q.title || `Soal ${index + 1}`).replace(/[:{}]/g, '');
-    const question = (cfg.question || 'Pertanyaan').replace(/[{}]/g, '');
+    const title = (q.title || `Question ${index + 1}`).replace(/[:{}]/g, '');
+    const question = (cfg.question || 'Question').replace(/[{}]/g, '');
 
     if (cfg.options && Array.isArray(cfg.options)) {
       output += `::${title}:: ${question} {\n`;

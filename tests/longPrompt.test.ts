@@ -6,10 +6,10 @@ describe('Long Prompt Handling Tests', () => {
     const sysPrompt = buildSystemInstruction([], { width: 1920, height: 1080 });
     
     // Verifies that the guidelines for handling long and detailed prompts are present
-    expect(sysPrompt).toContain('HANDLING LONG & DETAILED PROMPTS');
-    expect(sysPrompt).toContain('Deconstruct the prompt');
-    expect(sysPrompt).toContain('Comprehensive execution');
-    expect(sysPrompt).toContain('Hybrid balance');
+    expect(sysPrompt).toContain('For detailed prompts fulfil each requested part');
+    expect(sysPrompt).toContain('practical next step');
+    expect(sysPrompt).toContain('Indian classroom');
+    expect(sysPrompt).toContain('never invent textbook exercises');
     
     // Verifies that artificial caps that previously forced 2-5 sentence cutoffs are removed
     expect(sysPrompt).not.toContain('Length: 2-5 sentences in chat');
@@ -22,6 +22,6 @@ describe('Long Prompt Handling Tests', () => {
     expect(cap.maxToolCallsPerRequest).toBeGreaterThanOrEqual(20);
 
     const sysPrompt = buildSystemInstruction([], { width: 1920, height: 1080 }, undefined, {}, undefined, cap);
-    expect(sysPrompt).toContain(`Max ${cap.maxToolCallsPerRequest} tool calls`);
+    expect(sysPrompt).toContain(`Maximum ${cap.maxToolCallsPerRequest} tool calls`);
   });
 });

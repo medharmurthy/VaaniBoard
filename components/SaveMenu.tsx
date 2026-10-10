@@ -34,11 +34,11 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
     if (currentSessionId) {
       const session = sessions.find(s => s.id === currentSessionId);
       if (session) {
-        setTitle(session.title || 'Papan Tanpa Judul');
+        setTitle(session.title || 'Untitled board');
         setLastSavedTime(new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
     } else {
-      setTitle('Papan Pelajaran');
+      setTitle('Lesson board');
     }
   }, [currentSessionId, sessions, isOpen]);
 
@@ -62,11 +62,11 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
       setIsSavedDone(true);
       const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       setLastSavedTime(timeStr);
-      toast.success(`Papan "${title}" berhasil disimpan di memori laptop.`);
+      toast.success(`Board "${title}" saved locally.`);
       setTimeout(() => setIsSavedDone(false), 2500);
     } catch (err: any) {
       setIsSaving(false);
-      toast.error('Gagal menyimpan ke database lokal: ' + (err.message || ''));
+      toast.error('Could not save to the local database: ' + (err.message || ''));
     }
   };
 
@@ -78,7 +78,7 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
         app: 'trido',
         version: '1.0.0',
         exportedAt: Date.now(),
-        title: title || 'Papan Proyek',
+        title: title || 'Project board',
         pages: pages,
         currentPageIndex,
         domElements,
@@ -86,12 +86,12 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
         lessonPlan: useStore.getState().lessonPlan
       };
 
-      const safeName = (title || 'papan_trido').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+      const safeName = (title || 'vaani_board').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
       downloadFile(JSON.stringify(exportData, null, 2), `${safeName}_${Date.now()}.trido.json`, 'application/json');
-      toast.success(`Berkas cadangan "${safeName}.trido" berhasil disimpan ke laptop!`);
+      toast.success(`Backup file "${safeName}.trido" saved to this device.`);
       setIsOpen(false);
     } catch (err: any) {
-      toast.error('Gagal menyimpan berkas ke laptop.');
+      toast.error('Could not save the file to this device.');
     }
   };
 
@@ -101,12 +101,12 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
       saveCurrentSession(title).then(() => {
         createNewSession();
         setIsOpen(false);
-        toast.info('Papan tulis baru telah disiapkan.');
+        toast.info('A new board is ready.');
       });
     } else {
       createNewSession();
       setIsOpen(false);
-      toast.info('Papan tulis baru telah disiapkan.');
+      toast.info('A new board is ready.');
     }
   };
 
@@ -117,10 +117,10 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
         type="button"
         onClick={() => setIsOpen(!isOpen)} 
         className="hidden sm:flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:text-slate-900 border border-slate-200/80 bg-white/80 hover:bg-white backdrop-blur rounded-full transition-all shadow-xs active:scale-95 cursor-pointer"
-        title="Simpan sesi papan tulis ke penyimpanan lokal (Ctrl+S)"
+        title="Save the board session locally (Ctrl+S)"
       >
         <Save size={16} className={isSaving ? "animate-pulse text-[#1550aa]" : isSavedDone ? "text-emerald-600" : "text-[#1550aa]"} /> 
-        <span className="hidden md:inline">{isSavedDone ? 'Tersimpan' : t('save', 'Simpan')}</span>
+        <span className="hidden md:inline">{isSavedDone ? 'Saved' : t('save', 'Save')}</span>
         <ChevronDown size={14} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
@@ -129,7 +129,7 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
         type="button"
         onClick={() => setIsOpen(!isOpen)} 
         className="flex sm:hidden p-2.5 text-slate-700 hover:text-slate-900 border border-slate-200/80 bg-white/80 hover:bg-white backdrop-blur rounded-full transition-all shadow-xs active:scale-95 cursor-pointer"
-        title="Simpan"
+        title="Save"
       >
         <Save size={18} className="text-[#1550aa]" />
       </button>
@@ -147,7 +147,7 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
             <div className="p-4 border-b border-slate-100 bg-slate-50/70 space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  Nama Papan Pembelajaran
+                  Lesson board name
                 </label>
                 {lastSavedTime && (
                   <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
@@ -162,7 +162,7 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ketik judul materi papan..."
+                  placeholder="Enter lesson title…"
                   className="w-full text-xs font-bold text-slate-800 outline-hidden bg-transparent"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSaveToDb();
@@ -186,11 +186,11 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                   </div>
                   <div>
                     <div className="font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <span>Simpan ke Database Laptop</span>
+                      <span>Save ke Database Laptop</span>
                       {isSavedDone && <Check size={13} className="text-emerald-600" />}
                     </div>
                     <div className="text-[10px] text-slate-400 font-medium">
-                      IndexedDB otomatis • Cepat dibuka kembali
+                      Browser storage • Quick to reopen
                     </div>
                   </div>
                 </div>
@@ -211,10 +211,10 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                   </div>
                   <div>
                     <div className="font-extrabold text-slate-800">
-                      Unduh Berkas Proyek (.trido)
+                      Download project file (.trido)
                     </div>
                     <div className="text-[10px] text-slate-400 font-medium">
-                      Simpan fisik ke Flashdisk / Dokumen guru
+                      Save to a USB drive or teacher's documents
                     </div>
                   </div>
                 </div>
@@ -235,10 +235,10 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                   </div>
                   <div>
                     <div className="font-extrabold text-slate-800">
-                      Pusat Ekspor Gambar & PDF
+                      Export images & PDF
                     </div>
                     <div className="text-[10px] text-slate-400 font-medium">
-                      PNG (1x/2x/4K), PDF A4, SVG & Pratinjau
+                      PNG (1x/2x/4K), A4 PDF, SVG & preview
                     </div>
                   </div>
                 </div>
@@ -262,10 +262,10 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                   </div>
                   <div>
                     <div className="font-extrabold text-slate-800">
-                      Buka Riwayat Papan
+                      Open board history
                     </div>
                     <div className="text-[10px] text-slate-400 font-medium">
-                      Tersimpan {sessions.length} sesi pembelajaran
+                      {sessions.length} saved lesson sessions
                     </div>
                   </div>
                 </div>
@@ -281,7 +281,7 @@ export const SaveMenu: React.FC<SaveMenuProps> = ({ onExportClick }) => {
                 <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
                   <FilePlus size={16} />
                 </div>
-                <span>Buat Papan Tulis Baru</span>
+                <span>New whiteboard</span>
               </button>
             </div>
           </motion.div>

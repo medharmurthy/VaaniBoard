@@ -31,7 +31,7 @@ export async function callVertexRestApi(projectId: string, location: string, mod
   const tokenResponse = await client.getAccessToken();
   const token = tokenResponse.token;
 
-  const cleanProj = (projectId || 'gemma4good-494311').trim();
+  const cleanProj = (projectId || '').trim();
   const cleanLoc = (location || 'global').trim();
   const cleanModel = (modelName || 'gemini-3.8-flash').trim();
 
@@ -88,7 +88,7 @@ export const generateAgentActionsVertex = async (
   const canvasPayload = extractImagePayload(canvasImageBase64);
   const inputImagePayload = extractImagePayload(highResInputImage);
 
-  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || 'gemma4good-494311';
+  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || '';
   const location = cleanEnv(process.env.GOOGLE_CLOUD_LOCATION) || cleanEnv(process.env.VERTEX_LOCATION) || 'global';
   const selectedModel = cleanEnv(modelOverride) || cleanEnv(process.env.VERTEX_MODEL) || 'gemini-3.8-flash';
 
@@ -176,7 +176,7 @@ export const generateAgentActionsVertex = async (
 };
 
 export const generateToolContentVertex = async (toolId: string, prompt: string, modelOverride?: string): Promise<any> => {
-  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || 'gemma4good-494311';
+  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || '';
   const location = cleanEnv(process.env.GOOGLE_CLOUD_LOCATION) || cleanEnv(process.env.VERTEX_LOCATION) || 'global';
   const modelName = cleanEnv(modelOverride) || cleanEnv(process.env.VERTEX_MODEL) || 'gemini-3.8-flash';
 
@@ -247,7 +247,7 @@ Rules:
 };
 
 export const transcribeAudioVertex = async (audioBase64: string, mimeType = 'audio/webm', modelOverride?: string): Promise<string> => {
-  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || 'gemma4good-494311';
+  const projectId = cleanEnv(process.env.GOOGLE_CLOUD_PROJECT) || cleanEnv(process.env.VERTEX_PROJECT_ID) || '';
   const location = cleanEnv(process.env.GOOGLE_CLOUD_LOCATION) || cleanEnv(process.env.VERTEX_LOCATION) || 'global';
   const modelName = cleanEnv(modelOverride) || cleanEnv(process.env.VERTEX_MODEL) || 'gemini-3.8-flash';
   const cleanAudio = audioBase64.replace(/^data:audio\/\w+;base64,/, "");
@@ -257,7 +257,7 @@ export const transcribeAudioVertex = async (audioBase64: string, mimeType = 'aud
       role: 'user',
       parts: [
         { inlineData: { mimeType, data: cleanAudio } },
-        { text: "Transkripsikan rekaman suara audio ini secara akurat ke dalam teks bahasa Indonesia. Tangkap istilah pembelajaran, instruksi papan tulis, rumus, atau pertanyaan secara jelas dan tepat. Kembalikan HANYA teks transkripsi murni tanpa tanda petik pembuka/penutup atau catatan tambahan." }
+        { text: "Transcribe this recording faithfully in its spoken Indian language and script. Preserve code-mixed English terms. Return only the transcript." }
       ]
     }],
     generationConfig: {

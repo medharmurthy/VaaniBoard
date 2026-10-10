@@ -22,11 +22,11 @@ export const AttachedDocumentBadge: React.FC<AttachedDocumentBadgeProps> = ({ cl
 
   // Fallback for image-only legacy state
   const doc: AttachedDocument = attachedDocument || {
-    name: 'gambar.png',
+    name: 'image.png',
     type: 'image/png',
     size: 0,
     category: 'image',
-    text: '[Gambar dilampirkan]',
+    text: '[Image attached]',
     dataUrl: lastUploadedImage
   };
 
@@ -106,7 +106,7 @@ export const AttachedDocumentBadge: React.FC<AttachedDocumentBadgeProps> = ({ cl
             type="button"
             onClick={handleRemove}
             className="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white p-0.5 rounded-full shadow-md active:scale-95 transition-transform"
-            title="Hapus lampiran"
+            title="Remove attachment"
           >
             <X size={12} strokeWidth={2.5} />
           </button>
@@ -132,14 +132,14 @@ export const AttachedDocumentBadge: React.FC<AttachedDocumentBadgeProps> = ({ cl
         </span>
         {doc.pageCount && doc.pageCount > 1 && (
           <span className="text-[10px] opacity-75 whitespace-nowrap">
-            {doc.pageCount} hlm
+            {doc.pageCount} pages
           </span>
         )}
         <button
           type="button"
           onClick={handleRemove}
           className="ml-1 p-0.5 rounded-full hover:bg-black/10 text-current transition-colors active:scale-90 shrink-0"
-          title="Hapus file"
+          title="Remove file"
         >
           <X size={12} strokeWidth={2.5} />
         </button>

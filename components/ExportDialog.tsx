@@ -121,12 +121,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
         backgroundColor: bgColor,
         multiplier
       });
-      downloadFile(dataURL, `trido_papan_${multiplier === 4 ? '4K_' : multiplier === 2 ? 'HD_' : ''}${Date.now()}.png`, 'image/png');
-      toast.success(`Gambar PNG (${multiplier}x) berhasil diekspor.`);
+      downloadFile(dataURL, `vaani_board_${multiplier === 4 ? '4K_' : multiplier === 2 ? 'HD_' : ''}${Date.now()}.png`, 'image/png');
+      toast.success(`PNG image (${multiplier}x) exported.`);
       onClose();
     } catch (err: any) {
       console.error(err);
-      toast.error('Gagal mengekspor gambar PNG.');
+      toast.error('Could not export the PNG image.');
     }
   };
 
@@ -141,13 +141,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
       const ok = await copyImageToClipboard(dataURL);
       if (ok) {
         setCopiedImage(true);
-        toast.success('Gambar disalin ke clipboard! Siap ditempel (Ctrl+V) ke WhatsApp, Word, Canva.');
+        toast.success('Image copied to clipboard! Paste it (Ctrl+V) into WhatsApp, Word or Canva.');
         setTimeout(() => setCopiedImage(false), 2000);
       } else {
-        toast.error('Browser tidak mengizinkan salin gambar langsung.');
+        toast.error('This browser does not allow copying images directly.');
       }
     } catch (err: any) {
-      toast.error('Gagal menyalin gambar.');
+      toast.error('Could not copy the image.');
     }
   };
 
@@ -173,12 +173,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
         svg = svg.replace('<svg ', `<svg style="background-color: ${bgColor};" `);
       }
 
-      downloadFile(svg, `trido_vektor_${Date.now()}.svg`, 'image/svg+xml;charset=utf-8');
-      toast.success('Vektor SVG berhasil diekspor.');
+      downloadFile(svg, `vaani_board_vector_${Date.now()}.svg`, 'image/svg+xml;charset=utf-8');
+      toast.success('SVG vector exported.');
       onClose();
     } catch (err: any) {
       console.error(err);
-      toast.error('Gagal mengekspor vektor SVG.');
+      toast.error('Could not export the SVG vector.');
     }
   };
 
@@ -224,13 +224,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
       });
 
       const pdfBytes = await pdfDoc.save();
-      downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), `trido_dokumen_A4_${Date.now()}.pdf`, 'application/pdf');
+      downloadFile(new Blob([pdfBytes], { type: 'application/pdf' }), `vaani_board_document_A4_${Date.now()}.pdf`, 'application/pdf');
 
-      toast.success('Dokumen PDF A4 siap cetak berhasil dibuat.');
+      toast.success('Print-ready A4 PDF created.');
       onClose();
     } catch (err: any) {
       console.error(err);
-      toast.error('Gagal membuat dokumen PDF.');
+      toast.error('Could not create the PDF document.');
     } finally {
       setIsExportingPdf(false);
     }
@@ -254,15 +254,15 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
       app: 'trido',
       version: '1.0.0',
       exportedAt: Date.now(),
-      title: `Trido Proyek - ${new Date().toLocaleDateString('id-ID')}`,
+      title: `Vaani Board Project - ${new Date().toLocaleDateString('en-IN')}`,
       pages: updatedPages,
       currentPageIndex,
       messages: useStore.getState().messages,
       lessonPlan: useStore.getState().lessonPlan
     };
 
-    downloadFile(JSON.stringify(exportData, null, 2), `trido_cadangan_${Date.now()}.trido.json`, 'application/json');
-    toast.success('Berkas cadangan proyek Trido (.trido) berhasil diunduh!');
+    downloadFile(JSON.stringify(exportData, null, 2), `vaani_board_backup_${Date.now()}.trido.json`, 'application/json');
+    toast.success('Vaani Board project backup (.trido) downloaded!');
     onClose();
   };
 
@@ -310,13 +310,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
       setPendingImportData({
         fileName: file.name,
         sizeKb: (file.size / 1024).toFixed(1),
-        title: parsed.title || 'Proyek Tanpa Judul',
+        title: parsed.title || 'Untitled Project',
         pageCount: parsed.pages.length,
-        exportedAt: parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleDateString('id-ID') : 'Sesi Eksternal',
+        exportedAt: parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleDateString('en-IN') : 'External session',
         raw: parsed
       });
     } catch (err: any) {
-      toast.error('Berkas tidak dapat dibaca: ' + (err?.message || 'Pastikan format JSON atau .trido valid'));
+      toast.error('Could not read the file: ' + (err?.message || 'Make sure it is a valid JSON or .trido file'));
     } finally {
       if (e.target) e.target.value = '';
     }
@@ -327,11 +327,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
     setIsImporting(true);
     try {
       await importProjectSession(pendingImportData.raw);
-      toast.success(`Proyek "${pendingImportData.title}" berhasil dimuat ke papan!`);
+      toast.success(`Project "${pendingImportData.title}" loaded onto the board!`);
       setPendingImportData(null);
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Gagal menerapkan berkas proyek.');
+      toast.error(err?.message || 'Could not apply the project file.');
     } finally {
       setIsImporting(false);
     }
@@ -351,7 +351,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
 
       window.fabric.Image.fromURL(dataUrl, (img: any) => {
         if (!img) {
-          toast.error('Gagal memuat gambar.');
+          toast.error('Could not load the image.');
           return;
         }
 
@@ -376,7 +376,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
         canvas.add(img);
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
-        toast.success('Gambar berhasil disisipkan ke papan tulis!');
+        toast.success('Image inserted onto the whiteboard!');
         onClose();
       });
     };
@@ -411,10 +411,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-[#0a1a3a]">
-                    Pusat Ekspor & Impor Papan Tulis
+                    Whiteboard Export & Import Centre
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    Pratinjau langsung • Anti-layar hitam • Kompatibel Canva, Word & PDF
+                    Live preview • No black screens • Works with Canva, Word & PDF
                   </p>
                 </div>
               </div>
@@ -423,7 +423,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                 type="button"
                 onClick={onClose}
                 className="p-1.5 rounded-full hover:bg-slate-200/60 text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                title="Tutup"
+                title="Close"
               >
                 <X size={18} strokeWidth={2.4} />
               </button>
@@ -441,7 +441,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                 }`}
               >
                 <ImageIcon size={15} />
-                <span>Gambar & Dokumen (PNG / PDF / SVG)</span>
+                <span>Images & Documents (PNG / PDF / SVG)</span>
               </button>
 
               <button
@@ -454,7 +454,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                 }`}
               >
                 <FolderUp size={15} />
-                <span>Cadangan Proyek (.trido) & Impor</span>
+                <span>Project Backup (.trido) & Import</span>
               </button>
 
               <button
@@ -467,7 +467,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                 }`}
               >
                 <Sparkles size={15} />
-                <span>Konten Khusus (Mermaid & Kuis)</span>
+                <span>Special Content (Mermaid & Quiz)</span>
               </button>
             </div>
 
@@ -498,9 +498,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                     <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                       <span className="flex items-center gap-1.5">
                         <Eye size={14} className="text-[#1550aa]" />
-                        <span>Pratinjau Hasil Ekspor</span>
+                        <span>Export Preview</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 font-mono">Halaman {currentPageIndex + 1}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">Page {currentPageIndex + 1}</span>
                     </div>
 
                     <div className="aspect-[4/3] rounded-2xl border-2 border-slate-200 overflow-hidden relative flex items-center justify-center p-2 shadow-inner" style={{ backgroundColor: bgColor === 'transparent' ? '#f1f5f9' : bgColor }}>
@@ -513,20 +513,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                       ) : (
                         <div className="text-center space-y-1 text-slate-400">
                           <ImageIcon size={32} className="mx-auto opacity-50" />
-                          <p className="text-xs font-semibold">Papan siap diekspor</p>
+                          <p className="text-xs font-semibold">Board ready to export</p>
                         </div>
                       )}
 
                       {bgColor === 'transparent' && (
                         <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 text-white text-[9px] font-mono">
-                          Latar Transparan
+                          Transparent background
                         </div>
                       )}
                     </div>
 
                     {/* Background Plate Settings */}
                     <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
-                      <span className="text-[11px] font-bold text-slate-600 block">Warna Latar Belakang:</span>
+                      <span className="text-[11px] font-bold text-slate-600 block">Background colour:</span>
                       <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
@@ -536,7 +536,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           }`}
                         >
                           <span className="w-3 h-3 rounded-full border border-slate-300 bg-white" />
-                          <span>Putih</span>
+                          <span>White</span>
                         </button>
                         <button
                           type="button"
@@ -546,7 +546,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           }`}
                         >
                           <span className="w-3 h-3 rounded-full bg-slate-900" />
-                          <span>Gelap</span>
+                          <span>Dark</span>
                         </button>
                         <button
                           type="button"
@@ -556,7 +556,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           }`}
                         >
                           <span className="w-3 h-3 rounded-full border border-dashed border-slate-400 bg-transparent" />
-                          <span>Transparan</span>
+                          <span>Transparent</span>
                         </button>
                       </div>
                     </div>
@@ -564,7 +564,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
 
                   {/* Right Column: Actions & Formats */}
                   <div className="lg:col-span-7 space-y-3">
-                    <span className="text-xs font-bold text-slate-700 block">Pilihan Format Ekspor:</span>
+                    <span className="text-xs font-bold text-slate-700 block">Export formats:</span>
 
                     {/* PNG High-Res Card */}
                     <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:border-[#1550aa]/40 transition-all space-y-3">
@@ -574,8 +574,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                             <ImageIcon size={18} />
                           </div>
                           <div>
-                            <h4 className="font-extrabold text-sm text-[#0a1a3a]">Gambar PNG Berkualitas Tinggi</h4>
-                            <p className="text-[11px] text-slate-500 font-medium">Anti-layar hitam, resolusi tajam untuk presentasi</p>
+                            <h4 className="font-extrabold text-sm text-[#0a1a3a]">High-quality PNG image</h4>
+                            <p className="text-[11px] text-slate-500 font-medium">No black screens, sharp resolution for presentations</p>
                           </div>
                         </div>
 
@@ -603,16 +603,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           className="flex-1 py-2 px-3 bg-[#1550aa] hover:bg-[#0a1a3a] text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                         >
                           <Download size={14} />
-                          <span>Unduh Gambar PNG ({multiplier === 4 ? '4K' : `${multiplier}x`})</span>
+                          <span>Download PNG image ({multiplier === 4 ? '4K' : `${multiplier}x`})</span>
                         </button>
                         <button
                           type="button"
                           onClick={handleCopyImage}
                           className="py-2 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          title="Salin langsung ke clipboard untuk ditempel di WhatsApp Web atau Word"
+                          title="Copy straight to the clipboard to paste into WhatsApp Web or Word"
                         >
                           {copiedImage ? <Check size={14} className="text-emerald-600" /> : <Copy size={14} />}
-                          <span>{copiedImage ? 'Tersalin!' : 'Salin'}</span>
+                          <span>{copiedImage ? 'Copied!' : 'Copy'}</span>
                         </button>
                       </div>
                     </div>
@@ -624,8 +624,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           <FileText size={18} />
                         </div>
                         <div>
-                          <h4 className="font-extrabold text-sm text-[#0a1a3a]">Dokumen PDF Siap Cetak (A4)</h4>
-                          <p className="text-[11px] text-slate-500 font-medium">Layout landscape rapi untuk lembar kerja & hand-out siswa</p>
+                          <h4 className="font-extrabold text-sm text-[#0a1a3a]">Print-ready PDF document (A4)</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Clean landscape layout for worksheets & student handouts</p>
                         </div>
                       </div>
 
@@ -636,7 +636,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         className="py-2 px-4 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
                       >
                         <Printer size={14} />
-                        <span>{isExportingPdf ? 'Menyusun...' : 'Unduh PDF'}</span>
+                        <span>{isExportingPdf ? 'Preparing...' : 'Download PDF'}</span>
                       </button>
                     </div>
 
@@ -647,8 +647,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                           <FileCode size={18} />
                         </div>
                         <div>
-                          <h4 className="font-extrabold text-sm text-[#0a1a3a]">Vektor Skalabel SVG</h4>
-                          <p className="text-[11px] text-slate-500 font-medium">Dapat dibuka & diedit kembali di Canva, Figma, Illustrator</p>
+                          <h4 className="font-extrabold text-sm text-[#0a1a3a]">Scalable SVG vector</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Can be opened & edited again in Canva, Figma, Illustrator</p>
                         </div>
                       </div>
 
@@ -658,7 +658,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         className="py-2 px-4 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
                       >
                         <ExternalLink size={14} />
-                        <span>Unduh SVG</span>
+                        <span>Download SVG</span>
                       </button>
                     </div>
                   </div>
@@ -675,10 +675,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         <div className="w-8 h-8 rounded-xl bg-blue-100 text-[#1550aa] flex items-center justify-center">
                           <Download size={16} />
                         </div>
-                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Cadangkan Proyek Lengkap</h4>
+                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Back up the full project</h4>
                       </div>
                       <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                        Simpan seluruh status kanvas, halaman, elemen interaktif, dan riwayat obrolan ke berkas tunggal <code>.trido</code>.
+                        Save the whole canvas, all pages, interactive elements and chat history into a single <code>.trido</code> file.
                       </p>
                       <button
                         type="button"
@@ -686,7 +686,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         className="w-full py-2.5 px-4 bg-[#1550aa] hover:bg-[#0a1a3a] text-white font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                       >
                         <FileJson size={15} />
-                        <span>Unduh Berkas Cadangan (.trido)</span>
+                        <span>Download backup file (.trido)</span>
                       </button>
                     </div>
 
@@ -696,10 +696,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
                           <ImageIcon size={16} />
                         </div>
-                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Sisipkan Gambar ke Papan</h4>
+                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Insert an image on the board</h4>
                       </div>
                       <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                        Masukkan diagram, foto materi pelajaran, atau bagan (PNG, JPG, SVG) langsung ke posisi tengah papan aktif.
+                        Add diagrams, lesson photos or charts (PNG, JPG, SVG) straight to the centre of the active board.
                       </p>
                       <button
                         type="button"
@@ -707,7 +707,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                         className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <Upload size={15} />
-                        <span>Pilih Gambar dari Komputer</span>
+                        <span>Choose an image from your computer</span>
                       </button>
                     </div>
                   </div>
@@ -719,10 +719,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                     </div>
                     <div className="space-y-1">
                       <h4 className="font-extrabold text-sm text-[#0a1a3a]">
-                        Pulihkan / Buka Berkas Proyek Trido
+                        Restore / Open a Vaani Board project file
                       </h4>
                       <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
-                        Pilih berkas cadangan <code>.trido</code> atau <code>.json</code> untuk melanjutkan sesi mengajar sebelumnya.
+                        Choose a <code>.trido</code> or <code>.json</code> backup file to continue a previous teaching session.
                       </p>
                     </div>
 
@@ -731,7 +731,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                       onClick={() => projectFileInputRef.current?.click()}
                       className="px-5 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors cursor-pointer shadow-2xs"
                     >
-                      Jelajahi Berkas Cadangan (.trido)
+                      Browse backup files (.trido)
                     </button>
 
                     {/* Pending Import Inspection Card */}
@@ -739,14 +739,14 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                       <div className="mt-4 p-4 bg-white rounded-2xl border-2 border-[#1550aa] text-left space-y-3 shadow-md max-w-lg mx-auto">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] uppercase font-bold text-[#1550aa] bg-blue-50 px-2 py-0.5 rounded-full">
-                            Berkas Siap Dipulihkan
+                            Ready to restore
                           </span>
                           <span className="text-xs text-slate-400 font-mono">{pendingImportData.sizeKb} KB</span>
                         </div>
                         <div>
                           <h5 className="font-extrabold text-sm text-[#0a1a3a]">{pendingImportData.title}</h5>
                           <p className="text-xs text-slate-500">
-                            Terdiri dari {pendingImportData.pageCount} halaman • Dicadangkan {pendingImportData.exportedAt}
+                            {pendingImportData.pageCount} page(s) • Backed up {pendingImportData.exportedAt}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
@@ -756,14 +756,14 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                             disabled={isImporting}
                             className="flex-1 py-2 bg-[#1550aa] hover:bg-[#0a1a3a] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
                           >
-                            {isImporting ? 'Memulihkan...' : 'Buka Proyek Ini di Papan ↵'}
+                            {isImporting ? 'Restoring...' : 'Open this project on the board ↵'}
                           </button>
                           <button
                             type="button"
                             onClick={() => setPendingImportData(null)}
                             className="py-2 px-3 text-slate-500 hover:text-slate-800 text-xs font-bold cursor-pointer"
                           >
-                            Batal
+                            Cancel
                           </button>
                         </div>
                       </div>
@@ -778,7 +778,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                   <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-start gap-3">
                     <Sparkles size={18} className="text-[#1550aa] shrink-0 mt-0.5" />
                     <p className="text-xs text-slate-600 leading-relaxed font-medium">
-                      Trido dapat mengekspor diagram konsep dan kuis interaktif yang ada di papan ke format teks terstruktur standar agar dapat langsung disalin ke Canva, Notion, atau LMS sekolah.
+                      Vaani Board can export concept diagrams and interactive quizzes on the board to standard structured text, ready to paste into Canva, Notion or your school LMS.
                     </p>
                   </div>
 
@@ -787,7 +787,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                     <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3">
                       <div className="flex items-center gap-2">
                         <GitBranch size={16} className="text-[#1550aa]" />
-                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Diagram Mindmap Aktif</h4>
+                        <h4 className="font-extrabold text-sm text-[#0a1a3a]">Active mind map diagram</h4>
                       </div>
                       <div className="p-3 bg-slate-50 rounded-xl font-mono text-xs text-slate-800 max-h-32 overflow-y-auto custom-scrollbar border border-slate-200">
                         {exportMindmapToMermaid(activeMindmapNodes)}
@@ -799,13 +799,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                             const code = exportMindmapToMermaid(activeMindmapNodes);
                             navigator.clipboard.writeText(code);
                             setCopiedMermaid(true);
-                            toast.success('Sintaks Mermaid disalin!');
+                            toast.success('Mermaid syntax copied!');
                             setTimeout(() => setCopiedMermaid(false), 2000);
                           }}
                           className="px-3 py-1.5 bg-[#1550aa] text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
                         >
                           {copiedMermaid ? <Check size={14} /> : <Copy size={14} />}
-                          <span>{copiedMermaid ? 'Tersalin' : 'Salin Kode Mermaid'}</span>
+                          <span>{copiedMermaid ? 'Copied' : 'Copy Mermaid code'}</span>
                         </button>
                       </div>
                     </div>
@@ -816,9 +816,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ isOpen, onClose, can
                       <div className="w-10 h-10 rounded-full bg-slate-200/70 text-slate-400 flex items-center justify-center">
                         <GitBranch size={20} />
                       </div>
-                      <div className="font-bold text-slate-700 text-sm">Belum ada diagram mindmap di halaman aktif</div>
+                      <div className="font-bold text-slate-700 text-sm">No mind map on the active page yet</div>
                       <p className="text-xs text-slate-500 max-w-sm">
-                        Buat peta konsep bersama AI di tab obrolan untuk melihat opsi ekspor Mermaid di sini.
+                        Create a concept map with the AI in the chat tab to see Mermaid export options here.
                       </p>
                     </div>
                   )}

@@ -7,13 +7,13 @@ const I18nContext = createContext<Ctx | null>(null);
 
 function initialLang(): Lang {
   try {
-    const saved = localStorage.getItem("trido-lang");
-    if (saved === "en" || saved === "id") return saved;
+    const saved = localStorage.getItem("vaani-lang");
+    if (saved === "en" || saved === "hi") return saved;
   } catch {
     /* ignore */
   }
-  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("id")) return "id";
-  return "en";
+  if (typeof navigator !== "undefined" && navigator.language?.toLowerCase().startsWith("hi")) return "hi";
+  return "hi";
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
@@ -22,7 +22,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
     try {
-      localStorage.setItem("trido-lang", l);
+      localStorage.setItem("vaani-lang", l);
     } catch {
       /* ignore */
     }

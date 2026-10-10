@@ -19,6 +19,11 @@ import { TodoListTool } from './TodoListTool';
 import { SpinWheelTool } from './SpinWheelTool';
 import { ScoreboardTool } from './ScoreboardTool';
 import { MathGraphTool } from './MathGraphTool';
+import { LetterGame } from './fln/LetterGame';
+import { CountingActivity } from './fln/CountingActivity';
+import { ExerciseSheet } from './fln/ExerciseSheet';
+import { LabelledDiagram } from './fln/LabelledDiagram';
+import { getLanguageProfile } from '../utils/languages';
 import {
   Printer, Maximize2, Minimize2, X, Download, FileText, Globe,
   Code, Compass, BookOpen, Clock, Calculator, HelpCircle, Layers, Sparkles, Users, SquareCheckBig,
@@ -37,17 +42,44 @@ import {
   slugify
 } from '../utils/smartExport';
 import { toast } from '../utils/toast';
+import { screenDeltaToWorld, transformPoint } from '../utils/boardLayout';
 
 export const DomOverlay: React.FC = () => {
   const domElements = useStore(state => state.domElements);
   const viewportTransform = useStore(state => state.viewportTransform);
   const isActing = useStore(state => state.isActing);
   const removeDomElement = useStore(state => state.removeDomElement);
+  const boardLanguage = useStore(state => state.boardLanguage);
+  const isViewer = useStore(state => state.isViewerUrl);
+  const lessonMode = useStore(state => state.lessonMode);
 
   const [fullscreenWidgetId, setFullscreenWidgetId] = useState<string | null>(null);
+  const [lastViewedCardId, setLastViewedCardId] = useState<string | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const [overlaySize, setOverlaySize] = useState({ width: 1000, height: 700 });
   const [draggingWidget, setDraggingWidget] = useState<{ id: string; startMouseX: number; startMouseY: number; startElX: number; startElY: number } | null>(null);
   const [resizingWidget, setResizingWidget] = useState<{ id: string; startMouseX: number; startMouseY: number; startWidth: number; startHeight: number } | null>(null);
   const rafIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const element = overlayRef.current;
+    if (!element) return;
+    const update = () => setOverlaySize({ width: element.clientWidth || 1000, height: element.clientHeight || 700 });
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const focusCard = (event: Event) => {
+      const id = (event as CustomEvent).detail?.id;
+      if (useStore.getState().domElements[id]) setFullscreenWidgetId(id);
+    };
+    window.addEventListener('vaani:focus-board-card', focusCard);
+    return () => window.removeEventListener('vaani:focus-board-card', focusCard);
+  }, []);
 
   const handleTitlebarMouseDown = (el: DomElementState, e: React.MouseEvent | React.PointerEvent) => {
     if (e.button !== 0) return; // Only drag on left click
@@ -84,11 +116,8 @@ export const DomOverlay: React.FC = () => {
 
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = null;
-        const scale = viewportTransform[0] || 1;
-
         if (draggingWidget) {
-          const deltaX = (clientX - draggingWidget.startMouseX) / scale;
-          const deltaY = (clientY - draggingWidget.startMouseY) / scale;
+          const { x: deltaX, y: deltaY } = screenDeltaToWorld({ x: clientX - draggingWidget.startMouseX, y: clientY - draggingWidget.startMouseY }, viewportTransform);
 
           const newX = Math.round(draggingWidget.startElX + deltaX);
           const newY = Math.round(draggingWidget.startElY + deltaY);
@@ -96,8 +125,11 @@ export const DomOverlay: React.FC = () => {
           useStore.getState().updateDomElement(draggingWidget.id, { x: newX, y: newY });
           window.dispatchEvent(new CustomEvent('moveCanvasPlaceholder', { detail: { id: draggingWidget.id, x: newX, y: newY } }));
         } else if (resizingWidget) {
-          const deltaX = (clientX - resizingWidget.startMouseX) / scale;
-          const deltaY = (clientY - resizingWidget.startMouseY) / scale;
+          const { x: worldX, y: worldY } = screenDeltaToWorld({ x: clientX - resizingWidget.startMouseX, y: clientY - resizingWidget.startMouseY }, viewportTransform);
+          const element = useStore.getState().domElements[resizingWidget.id];
+          const angle = (element?.rotation || 0) * Math.PI / 180;
+          const deltaX = (worldX * Math.cos(angle) + worldY * Math.sin(angle)) / (element?.scaleX || 1);
+          const deltaY = (-worldX * Math.sin(angle) + worldY * Math.cos(angle)) / (element?.scaleY || 1);
 
           const newW = Math.max(260, Math.round(resizingWidget.startWidth + deltaX));
           const newH = Math.max(180, Math.round(resizingWidget.startHeight + deltaY));
@@ -117,15 +149,17 @@ export const DomOverlay: React.FC = () => {
       setResizingWidget(null);
     };
 
-    window.addEventListener('mousemove', handleMouseMove, { passive: true });
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handleMouseMove, { passive: true });
+    window.addEventListener('pointerup', handleMouseUp);
+    window.addEventListener('pointercancel', handleMouseUp);
     return () => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerup', handleMouseUp);
+      window.removeEventListener('pointercancel', handleMouseUp);
     };
   }, [draggingWidget, resizingWidget, viewportTransform]);
 
@@ -153,42 +187,42 @@ export const DomOverlay: React.FC = () => {
     e.stopPropagation();
     e.preventDefault();
 
-    const title = el.config?.title || el.componentType || 'Trido Dokumen';
+    const title = el.config?.title || el.componentType || 'Vaani Board document';
     const type = el.componentType || '';
 
     // Specialized print handlers
     if (type.startsWith('QUIZ_')) {
       exportQuizAsPrintableWorksheet({ title, type, config: el.config });
-      toast.success('Membuka lembar ujian siap cetak.');
+      toast.success('Opening the printable worksheet.');
       return;
     }
 
     triggerPrintComponent(`widget-${el.id}`);
-    toast.success('Membuka pratinjau cetak PDF bersih.');
+    toast.success('Opening print preview.');
   };
 
   const handleExportComponentPNG = async (el: DomElementState, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    const title = el.config?.title || el.componentType || 'komponen';
-    toast.info('Membuat gambar PNG HD...');
+    const title = el.config?.title || el.componentType || 'Board card';
+    toast.info('Creating a high-resolution PNG…');
     const ok = await exportComponentAsPNG(`widget-${el.id}`, title, { pixelRatio: 2 });
     if (ok) {
-      toast.success('Gambar PNG berhasil diunduh!');
+      toast.success('PNG downloaded.');
     } else {
-      toast.error('Gagal membuat gambar PNG.');
+      toast.error('Could not create the PNG.');
     }
   };
 
   const handleCopyComponentImage = async (el: DomElementState, e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    toast.info('Menyalin gambar ke clipboard...');
+    toast.info('Copying image to the clipboard…');
     const ok = await copyComponentAsImage(`widget-${el.id}`);
     if (ok) {
-      toast.success('Gambar disalin ke clipboard! Siap di-paste ke Canva/WA.');
+      toast.success('Image copied to the clipboard.');
     } else {
-      toast.error('Gagal menyalin gambar.');
+      toast.error('Could not copy the image.');
     }
   };
 
@@ -201,26 +235,26 @@ export const DomOverlay: React.FC = () => {
 
     if (type === 'MARKDOWN_NOTE' || type === 'DOCUMENT_PAGE') {
       exportDocumentAsHtml(title, config.markdown || config.content || '');
-      toast.success('Dokumen HTML berhasil diunduh.');
+      toast.success('HTML document downloaded.');
     } else if (type === 'MARKMAP_MINDMAP') {
       const svg = document.querySelector(`#widget-${el.id} svg`);
       if (svg) {
         const svgData = new XMLSerializer().serializeToString(svg);
         downloadFile(svgData, `${slugify(title)}_markmap.svg`, 'image/svg+xml;charset=utf-8');
-        toast.success('Vektor SVG Markmap berhasil diunduh.');
+        toast.success('Markmap SVG downloaded.');
       } else {
         exportDocumentAsMarkdown(title, config.markdown || config.content || '');
-        toast.success('Markdown berhasil diunduh.');
+        toast.success('Markdown downloaded.');
       }
     } else if (type === 'MERMAID_DIAGRAM') {
       const svg = document.querySelector(`#widget-${el.id} svg`);
       if (svg) {
         const svgData = new XMLSerializer().serializeToString(svg);
         downloadFile(svgData, `${slugify(title)}_diagram.svg`, 'image/svg+xml;charset=utf-8');
-        toast.success('Vektor SVG diagram berhasil diunduh.');
+        toast.success('Diagram SVG downloaded.');
       } else {
         downloadFile(config.code || '', `${slugify(title)}.mmd`, 'text/plain;charset=utf-8');
-        toast.success('Kode Mermaid berhasil diunduh.');
+        toast.success('Mermaid code downloaded.');
       }
     } else if (type === 'INTERACTIVE_APP') {
       exportInteractiveAppAsHtml({
@@ -229,10 +263,10 @@ export const DomOverlay: React.FC = () => {
         css: config.css,
         js: config.js
       });
-      toast.success('Aplikasi web mandiri (.html) berhasil diunduh.');
+      toast.success('Aplikasi web mandiri (.html) downloaded.');
     } else if (type.startsWith('QUIZ_')) {
       exportQuizAsPrintableWorksheet({ title, type, config });
-      toast.success('Membuka lembar ujian siswa.');
+      toast.success('Opening the pupil worksheet.');
     } else {
       handlePrint(el, e);
     }
@@ -309,6 +343,14 @@ export const DomOverlay: React.FC = () => {
           return <AppBuilderTool config={el.config} />;
         case 'QUIZ_APP':
           return <QuizApp config={el.config} />;
+        case 'LETTER_GAME':
+          return <LetterGame config={el.config || {}} lang={boardLanguage} readOnly={isViewer} />;
+        case 'COUNTING_ACTIVITY':
+          return <CountingActivity config={el.config || {}} lang={boardLanguage} readOnly={isViewer} />;
+        case 'EXERCISE_SHEET':
+          return <ExerciseSheet config={el.config || {}} lang={boardLanguage} readOnly={isViewer} />;
+        case 'LABELLED_DIAGRAM':
+          return <LabelledDiagram config={el.config || {}} lang={boardLanguage} readOnly={isViewer} />;
         case 'IMAGE_URL':
           return (
             <div className="w-full h-full flex items-center justify-center bg-slate-50 p-3">
@@ -321,25 +363,40 @@ export const DomOverlay: React.FC = () => {
           );
         default:
           return (
-            <div
-              className="w-full h-full"
-              dangerouslySetInnerHTML={{ __html: el.html || '<div>Konten widget</div>' }}
-            />
+            <iframe title={el.config?.title || 'Imported widget'} sandbox=""
+              className="w-full h-full border-0"
+              srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">${el.html || ''}`} />
           );
       }
     }
     return (
-      <div
-        className="w-full h-full"
-        dangerouslySetInnerHTML={{ __html: el.html || '<div>Konten</div>' }}
-      />
+      <iframe title="Imported content" sandbox="" className="w-full h-full border-0"
+        srcDoc={`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">${el.html || ''}`} />
     );
   };
 
   const activeFullscreenEl = fullscreenWidgetId ? domElements[fullscreenWidgetId] : null;
+  const cards = Object.values(domElements);
+  const offscreenCards = cards.filter(element => {
+    const center = transformPoint(element, viewportTransform);
+    const width = element.width * Math.abs(element.scaleX ?? 1) * Math.hypot(viewportTransform[0], viewportTransform[1]);
+    const height = element.height * Math.abs(element.scaleY ?? 1) * Math.hypot(viewportTransform[2], viewportTransform[3]);
+    const angle = (element.rotation || 0) * Math.PI / 180;
+    const boundsWidth = Math.abs(width * Math.cos(angle)) + Math.abs(height * Math.sin(angle));
+    const boundsHeight = Math.abs(width * Math.sin(angle)) + Math.abs(height * Math.cos(angle));
+    return center.x - boundsWidth / 2 < 0 || center.y - boundsHeight / 2 < 0 || center.x + boundsWidth / 2 > overlaySize.width || center.y + boundsHeight / 2 > overlaySize.height;
+  });
+  const viewNextCard = () => {
+    const currentIndex = cards.findIndex(element => element.id === lastViewedCardId);
+    const next = lastViewedCardId ? cards[(currentIndex + 1) % cards.length] : offscreenCards[0];
+    if (!next) return;
+    setLastViewedCardId(next.id);
+    window.dispatchEvent(new CustomEvent('vaani:view-board-card', { detail: { id: next.id } }));
+  };
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden z-10">
+    <div ref={overlayRef} className={`pointer-events-none absolute inset-0 overflow-hidden z-10 ${lessonMode === 'nipun' ? 'vaani-nipun' : ''}`}
+      style={{ fontFamily: getLanguageProfile(boardLanguage).font }}>
       {/* ── 1. REGULAR CANVAS-PINNED DOM ELEMENTS ── */}
       <div
         className="absolute inset-0 will-change-transform"
@@ -351,7 +408,7 @@ export const DomOverlay: React.FC = () => {
         {Object.values(domElements).map((el: DomElementState) => {
           if (fullscreenWidgetId === el.id) return null; // Rendered in fullscreen portal instead
 
-          const title = el.config?.title || el.componentType?.replace(/_/g, ' ') || 'KOMPONEN';
+          const title = el.config?.title || el.componentType?.replace(/_/g, ' ') || 'Board card';
 
           const isDragging = draggingWidget?.id === el.id;
           const isResizing = resizingWidget?.id === el.id;
@@ -359,9 +416,8 @@ export const DomOverlay: React.FC = () => {
           return (
             <div
               key={el.id}
-              className={`absolute flex flex-col overflow-hidden rounded-[2rem] bg-white border-2 will-change-transform select-none ${
-                isActing ? 'opacity-50' : 'opacity-100'
-              } ${
+              data-board-card-id={el.id}
+              className={`board-widget absolute flex flex-col overflow-hidden rounded-2xl bg-white border will-change-transform select-none opacity-100 ${
                 isDragging
                   ? 'shadow-[0_24px_70px_rgba(10,26,58,0.22)] border-[#1550aa] scale-[1.018] z-40 ring-4 ring-[#1550aa]/15'
                   : 'shadow-[0_12px_45px_rgba(10,26,58,0.10)] border-slate-200/90 hover:border-slate-300'
@@ -371,20 +427,22 @@ export const DomOverlay: React.FC = () => {
                 height: `${el.height}px`,
                 left: el.x,
                 top: el.y,
-                transform: `translate(-50%, -50%) rotate(${el.rotation || 0}deg)`,
+                transform: `translate(-50%, -50%) rotate(${el.rotation || 0}deg) scale(${el.scaleX ?? 1}, ${el.scaleY ?? 1})`,
                 transformOrigin: 'center center',
+                zIndex: isDragging || isResizing ? 40 : el.zIndex,
                 pointerEvents: 'auto',
                 transition: isDragging || isResizing ? 'none' : 'box-shadow 0.2s ease, border-color 0.2s ease, opacity 0.2s ease'
               }}
             >
               {/* Desktop Header / PC Window Titlebar with Generous Drag Area */}
               <div
-                onMouseDown={(e) => handleTitlebarMouseDown(el, e)}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); handleTitlebarMouseDown(el, e); }}
+                style={{ touchAction: 'none' }}
                 onDoubleClick={() => setFullscreenWidgetId(el.id)}
                 className={`flex h-12 w-full items-center justify-between px-3.5 border-b border-slate-200/80 shrink-0 select-none transition-colors cursor-grab active:cursor-grabbing ${
                   isDragging ? 'bg-[#1550aa]/10' : 'bg-slate-50/90 hover:bg-slate-100/90'
                 }`}
-                title="Tahan dan geser di mana saja pada judul untuk memindahkan widget • Klik ganda untuk Layar Penuh"
+                title="Drag to move · Double-click to focus"
               >
                 {/* Title & Icon & Drag Hitbox (Flex-1 so touching/clicking anywhere drags) */}
                 <div className="flex-1 flex items-center gap-2.5 min-w-0 pr-3 py-1 cursor-grab active:cursor-grabbing">
@@ -400,12 +458,12 @@ export const DomOverlay: React.FC = () => {
                 </div>
 
                 {/* PC Window Actions: Minimalist & focused */}
-                <div className="flex items-center gap-1 shrink-0 no-print" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-1 shrink-0 no-print" onPointerDown={(e) => e.stopPropagation()}>
                   {/* Fullscreen / Focus Mode */}
                   <button
                     onClick={() => setFullscreenWidgetId(el.id)}
                     className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-slate-200/70 text-slate-400 hover:text-[#1550aa] transition cursor-pointer"
-                    title="Layar Penuh (Fokus)"
+                    title="Focus view"
                   >
                     <Maximize2 size={14} />
                   </button>
@@ -414,7 +472,7 @@ export const DomOverlay: React.FC = () => {
                   <button
                     onClick={(e) => handleDelete(el.id, e)}
                     className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                    title="Tutup Komponen"
+                    title="Close widget"
                   >
                     <X size={15} strokeWidth={2.5} />
                   </button>
@@ -426,9 +484,9 @@ export const DomOverlay: React.FC = () => {
                 {renderContent(el)}
 
                 {isActing && (
-                  <div className="absolute inset-0 z-50 bg-[#00f0ff]/5 flex items-center justify-center backdrop-blur-[1px]">
-                    <div className="bg-black/90 px-3 py-1 rounded border border-cyan-400/50 text-cyan-300 text-[10px] font-mono animate-pulse tracking-tighter">
-                      AGENT_INTERACTING...
+                  <div className="absolute inset-0 z-50 bg-white/20 flex items-end justify-end p-3">
+                    <div className="bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 text-blue-700 text-xs font-medium">
+                      Updating board…
                     </div>
                   </div>
                 )}
@@ -436,9 +494,10 @@ export const DomOverlay: React.FC = () => {
 
               {/* Tactile Corner Resize Handle (learned from C7Cards & windows) */}
               <div
-                onMouseDown={(e) => handleResizeMouseDown(el, e)}
+                onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); handleResizeMouseDown(el, e); }}
+                style={{ touchAction: 'none' }}
                 className="absolute bottom-0 right-0 w-8 h-8 flex items-end justify-end p-1.5 cursor-nwse-resize z-40 select-none group/resize touch-none"
-                title="Tarik sudut untuk mengubah ukuran widget"
+                title="Drag corner to resize"
               >
                 <div className="w-3.5 h-3.5 rounded-br-sm border-b-2 border-r-2 border-[#1550aa] group-hover/resize:border-[#ffcc00] group-hover/resize:scale-125 transition-all" />
                 {isResizing && (
@@ -452,6 +511,14 @@ export const DomOverlay: React.FC = () => {
         })}
       </div>
 
+      {!activeFullscreenEl && cards.length > 0 && (offscreenCards.length > 0 || lastViewedCardId) && overlayRef.current && createPortal(
+        <button type="button" data-board-occluder="true" aria-label="View next lesson card" onClick={viewNextCard}
+          className="pointer-events-auto absolute right-3 top-20 md:right-auto md:left-3 md:top-3 z-60 max-w-[calc(100%-24px)] rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-800 shadow-md"
+          title="View the next board card without changing zoom">
+          View next card{offscreenCards.length > 0 ? ` · ${offscreenCards.length} off-screen` : ''}
+        </button>, overlayRef.current.closest('main') || overlayRef.current.parentElement!
+      )}
+
       {/* ── 2. TRUE FULLSCREEN PC FOCUS MODE OVERLAY (MOUNTED DIRECTLY TO BODY VIA PORTAL) ── */}
       {activeFullscreenEl && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center pointer-events-auto p-3 sm:p-6 lg:p-8 font-sans select-none">
@@ -464,57 +531,61 @@ export const DomOverlay: React.FC = () => {
           {/* Desktop Fullscreen Window Card */}
           <div className="relative w-full h-full max-w-7xl max-h-[95vh] bg-white rounded-3xl shadow-[0_30px_100px_rgba(0,0,0,0.6)] border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 z-10">
             {/* Titlebar */}
-            <div className="flex h-14 px-6 items-center justify-between bg-slate-50 border-b border-slate-200/90 shrink-0 select-none">
+            <div className="flex min-h-14 flex-wrap gap-2 px-3 py-2 sm:px-6 items-center justify-between bg-slate-50 border-b border-slate-200/90 shrink-0 select-none">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-slate-200 shadow-sm shrink-0">
                   {getComponentIcon(activeFullscreenEl.componentType)}
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight truncate">
-                    {activeFullscreenEl.config?.title || activeFullscreenEl.componentType?.replace(/_/g, ' ') || 'KOMPONEN'}
+                    {activeFullscreenEl.config?.title || activeFullscreenEl.componentType?.replace(/_/g, ' ') || 'Board card'}
                   </h3>
-                  <p className="text-[11px] text-slate-500 font-medium">Mode Fokus Layar Penuh (Tekan ESC untuk kembali)</p>
+                  <p className="text-[11px] text-slate-500 font-medium">Focus view · Press Escape to return</p>
                 </div>
               </div>
 
               {/* Titlebar Actions */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {cards.length > 1 && <button type="button" aria-label="View next lesson card" onClick={() => {
+                  const next = cards[(cards.findIndex(element => element.id === activeFullscreenEl.id) + 1) % cards.length];
+                  setLastViewedCardId(next.id); setFullscreenWidgetId(next.id);
+                }} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800">Next card</button>}
                 <button
                   onClick={(e) => handleExportComponentPNG(activeFullscreenEl, e)}
                   className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  title="Unduh Gambar PNG HD Objek"
+                  title="Download a high-resolution PNG"
                 >
-                  <ImageIcon size={14} /> Unduh PNG
+                  <ImageIcon size={14} /> Download PNG
                 </button>
 
                 <button
                   onClick={(e) => handleCopyComponentImage(activeFullscreenEl, e)}
                   className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  title="Salin Gambar ke Clipboard"
+                  title="Copy image to clipboard"
                 >
-                  <Copy size={14} /> Salin Gambar
+                  <Copy size={14} /> Copy image
                 </button>
 
                 <button
                   onClick={(e) => handlePrint(activeFullscreenEl, e)}
                   className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  title="Cetak Dokumen Bersih / PDF"
+                  title="Print or save as PDF"
                 >
-                  <Printer size={14} /> Cetak / PDF
+                  <Printer size={14} /> Print / PDF
                 </button>
 
                 <button
                   onClick={(e) => handleQuickExport(activeFullscreenEl, e)}
                   className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-                  title="Unduh Berkas Mandiri"
+                  title="Download standalone file"
                 >
-                  <Download size={14} /> Unduh Berkas
+                  <Download size={14} /> Download file
                 </button>
 
                 <button
                   onClick={() => setFullscreenWidgetId(null)}
                   className="p-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 transition cursor-pointer ml-1"
-                  title="Keluar Layar Penuh (ESC)"
+                  title="Exit focus view (Escape)"
                 >
                   <Minimize2 size={16} />
                 </button>

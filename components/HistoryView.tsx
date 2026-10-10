@@ -20,7 +20,7 @@ const formatSize = (bytes: number) => {
 };
 
 const formatDate = (timestamp: number) => {
-  return new Intl.DateTimeFormat('id-ID', {
+  return new Intl.DateTimeFormat('en-IN', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
@@ -67,9 +67,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
       lessonPlan: item.lessonPlan || null
     };
 
-    const safeName = (item.title || 'papan').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const safeName = (item.title || 'board').toLowerCase().replace(/[^a-z0-9_-]/g, '_');
     downloadFile(JSON.stringify(exportData, null, 2), `${safeName}_${Date.now()}.trido.json`, 'application/json');
-    toast.success(`Berkas cadangan "${item.title}" berhasil diunduh!`);
+    toast.success(`Backup file "${item.title}" downloaded!`);
   };
 
   // Duplicate an existing session
@@ -78,7 +78,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
     const duplicated: BoardSession = {
       ...item,
       id: newId,
-      title: `${item.title} (Salinan)`,
+      title: `${item.title} (Copy)`,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -86,7 +86,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
     const { saveSessionToDb } = await import('../services/db');
     await saveSessionToDb(duplicated);
     await loadSessions();
-    toast.success(`Sesi "${item.title}" berhasil diduplikasi!`);
+    toast.success(`Session "${item.title}" duplicated!`);
   };
 
   // Inline Rename
@@ -106,7 +106,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
     await saveSessionToDb(updated);
     await loadSessions();
     setEditingTitleId(null);
-    toast.success('Nama papan berhasil diubah!');
+    toast.success('Board renamed!');
   };
 
   // Download preview as PNG image
@@ -114,24 +114,24 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
     const previewUrl = item.pages[0]?.previewDataUrl;
 
     if (!previewUrl || previewUrl.startsWith('http')) {
-      toast.info('Pratinjau gambar belum tersedia. Buka sesi ini lalu simpan untuk menghasilkan gambar.');
+      toast.info('No preview image yet. Open this session and save it to generate one.');
       return;
     }
 
     const a = document.createElement('a');
     a.href = previewUrl;
-    a.download = `${item.title.replace(/[^a-zA-Z0-9\s]/g, '') || 'papan'}.png`;
+    a.download = `${item.title.replace(/[^a-zA-Z0-9\s]/g, '') || 'board'}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast.success(`Pratinjau "${item.title}" berhasil diunduh.`);
+    toast.success(`Preview "${item.title}" downloaded.`);
   };
 
   // Confirm then delete
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
     deleteSession(confirmDelete.id);
-    toast.success(`Sesi "${confirmDelete.title}" telah dihapus.`);
+    toast.success(`Session "${confirmDelete.title}" deleted.`);
     setConfirmDelete(null);
   };
 
@@ -139,7 +139,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
   const handleSaveActiveNow = async () => {
     await saveCurrentSession();
     await loadSessions();
-    toast.success('Status papan saat ini telah dicadangkan ke riwayat.');
+    toast.success('Current board saved to history.');
   };
 
   return (
@@ -160,14 +160,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-black text-[#0a1a3a] tracking-tight">
-                  Riwayat Papan Tulis Lokal
+                  Local board history
                 </h2>
                 <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                  {sessions.length} Sesi
+                  {sessions.length} {sessions.length === 1 ? 'Session' : 'Sessions'}
                 </span>
               </div>
               <p className="text-xs text-slate-500 font-medium">
-                Tersimpan di memori laptop (IndexedDB) • Akses tanpa kuota internet
+                Stored on this laptop (IndexedDB) • Works without internet data
               </p>
             </div>
           </div>
@@ -178,7 +178,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
               <input
                 type="text"
-                placeholder="Cari riwayat papan..."
+                placeholder="Search board history…"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 className="w-full bg-slate-100/80 border border-slate-200 rounded-full py-1.5 pl-9 pr-3 text-xs font-semibold text-slate-800 outline-hidden focus:bg-white focus:border-[#1550aa] transition-all placeholder:text-slate-400"
@@ -201,7 +201,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
               className="hidden md:flex items-center gap-1.5 px-4 py-2 bg-[#1550aa] hover:bg-[#0a1a3a] text-white text-xs font-bold rounded-full transition-all shadow-xs cursor-pointer"
             >
               <Plus size={14} />
-              <span>Simpan Papan Aktif</span>
+              <span>Save current board</span>
             </button>
 
             {/* Close Button */}
@@ -209,7 +209,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
               type="button"
               onClick={onClose}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-              title="Tutup riwayat"
+              title="Close history"
             >
               <X size={18} strokeWidth={2.4} />
             </button>
@@ -224,7 +224,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={15} />
             <input
               type="text"
-              placeholder="Cari riwayat papan..."
+              placeholder="Search board history…"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-white border border-slate-300 rounded-full py-2 pl-9 pr-4 text-xs font-semibold text-slate-800 outline-hidden"
@@ -261,7 +261,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                         <div className="text-center space-y-1 text-slate-400 select-none">
                           <Layers size={28} className="mx-auto opacity-40 text-[#1550aa]" />
                           <span className="text-[10px] font-bold block uppercase tracking-wider text-slate-400">
-                            Papan Pelajaran
+                            Lesson board
                           </span>
                         </div>
                       )}
@@ -269,11 +269,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                       {/* Top Badges */}
                       <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
                         <span className="bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
-                          {item.pages.length} Hlm
+                          {item.pages.length} {item.pages.length === 1 ? 'page' : 'pages'}
                         </span>
                         {isActiveSession && (
                           <span className="bg-[#1550aa] text-white px-2 py-0.5 rounded-md text-[9px] font-black tracking-wide uppercase shadow-2xs">
-                            Aktif
+                            Active
                           </span>
                         )}
                       </div>
@@ -282,7 +282,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                       <div className="absolute top-2.5 right-2.5 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           type="button"
-                          title="Duplikasi sesi papan"
+                          title="Duplicate board session"
                           onClick={() => handleDuplicateSession(item)}
                           className="w-7 h-7 rounded-lg bg-white/90 hover:bg-white text-slate-600 hover:text-[#1550aa] flex items-center justify-center shadow-xs transition-colors cursor-pointer"
                         >
@@ -290,7 +290,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                         </button>
                         <button
                           type="button"
-                          title="Unduh berkas cadangan (.trido)"
+                          title="Download backup file (.trido)"
                           onClick={() => handleExportProjectFile(item)}
                           className="w-7 h-7 rounded-lg bg-white/90 hover:bg-white text-slate-600 hover:text-[#1550aa] flex items-center justify-center shadow-xs transition-colors cursor-pointer"
                         >
@@ -298,7 +298,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                         </button>
                         <button
                           type="button"
-                          title="Hapus sesi"
+                          title="Delete session"
                           onClick={() => setConfirmDelete(item)}
                           className="w-7 h-7 rounded-lg bg-white/90 hover:bg-white text-slate-600 hover:text-rose-600 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
                         >
@@ -328,7 +328,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                               onClick={() => handleSaveRename(item)}
                               className="px-2 py-1 bg-[#1550aa] text-white text-[10px] font-bold rounded cursor-pointer"
                             >
-                              Simpan
+                              Save
                             </button>
                           </div>
                         ) : (
@@ -339,7 +339,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                                 setNewTitleValue(item.title);
                               }}
                               className="font-extrabold text-sm text-[#0a1a3a] leading-tight line-clamp-1 cursor-pointer hover:text-[#1550aa] transition-colors"
-                              title="Klik ganda untuk mengubah nama"
+                              title="Double-click to rename"
                             >
                               {item.title}
                             </h3>
@@ -350,7 +350,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                                 setNewTitleValue(item.title);
                               }}
                               className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
-                              title="Ubah nama papan"
+                              title="Rename board"
                             >
                               <Edit2 size={12} />
                             </button>
@@ -364,12 +364,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                         </div>
                       </div>
 
-                      {/* Primary Action Button: Buka di Papan */}
+                      {/* Primary Action Button: Open board */}
                       <button
                         type="button"
                         onClick={() => {
                           loadSessionData(item.id);
-                          toast.success(`Memuat sesi "${item.title}"`);
+                          toast.success(`Loading session "${item.title}"`);
                           onClose();
                         }}
                         className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -379,7 +379,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                         }`}
                       >
                         <CornerDownLeft size={13} />
-                        <span>{isActiveSession ? 'Kembali ke Papan Aktif' : 'Buka di Papan Tulis'}</span>
+                        <span>{isActiveSession ? 'Back to active board' : 'Open board'}</span>
                       </button>
                     </div>
                   </motion.div>
@@ -393,12 +393,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
                 <Search size={28} />
               </div>
               <h3 className="text-base font-extrabold text-[#0a1a3a]">
-                {searchQuery ? 'Tidak ada sesi yang cocok' : 'Belum ada sesi tersimpan'}
+                {searchQuery ? 'No matching sessions' : 'No saved sessions yet'}
               </h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 {searchQuery 
-                  ? 'Coba gunakan kata kunci pencarian yang berbeda.' 
-                  : 'Klik tombol Simpan di pojok kanan atas atau gunakan shortcut Ctrl+S untuk mencadangkan materi pelajaran.'}
+                  ? 'Try a different search term.'
+                  : 'Click Save in the top-right corner or press Ctrl+S to back up your lesson.'}
               </p>
             </div>
           )}
@@ -407,14 +407,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
         {/* Footer */}
         <div className="px-6 py-3.5 bg-white border-t border-slate-200 flex items-center justify-between shrink-0 text-xs text-slate-500">
           <span className="font-medium">
-            Database Lokal: <strong>IndexedDB Browser (Tanpa Batas Kuota)</strong>
+            Local database: <strong>Browser IndexedDB (no quota limit)</strong>
           </span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-full transition-colors cursor-pointer"
           >
-            Tutup
+            Close
           </button>
         </div>
       </motion.div>
@@ -422,12 +422,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onClose }) => {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={!!confirmDelete}
-        title="Hapus Sesi Papan Tulis?"
-        message={`Sesi "${confirmDelete?.title}" akan dihapus dari penyimpanan laptop dan tidak dapat dipulihkan.`}
+        title="Delete board session?"
+        message={`Session "${confirmDelete?.title}" will be deleted from this laptop and cannot be recovered.`}
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmDelete(null)}
-        confirmLabel="Ya, Hapus Sesi"
-        cancelLabel="Batal"
+        confirmLabel="Yes, delete session"
+        cancelLabel="Cancel"
         confirmVariant="danger"
       />
     </>

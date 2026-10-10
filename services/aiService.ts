@@ -7,7 +7,7 @@ export interface ViewportBounds {
   height: number;
 }
 
-export type AiErrorCode = 'invalid_key' | 'no_internet' | 'rate_limited' | 'model_not_found' | 'local_unavailable' | 'server_error';
+export type AiErrorCode = 'invalid_key' | 'no_internet' | 'rate_limited' | 'model_not_found' | 'local_unavailable' | 'server_error' | 'billing_required' | 'missing_key' | 'provider_error' | 'request_timeout';
 
 export class AiServiceError extends Error {
   code: AiErrorCode;
@@ -27,11 +27,11 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const friendlyMessageForStatus = (status: number, fallback?: string) => {
   if (fallback) return fallback;
-  if (status === 401 || status === 403) return 'Kunci API atau izin layanan AI tidak valid.';
-  if (status === 404) return 'Model AI yang dipilih tidak ditemukan.';
-  if (status === 429) return 'Kuota AI sedang tercapai. Coba lagi sebentar.';
-  if (status >= 500) return 'Layanan AI sedang bermasalah.';
-  return 'Permintaan AI gagal diproses.';
+  if (status === 401 || status === 403) return 'The API key or AI service permissions are invalid.';
+  if (status === 404) return 'The selected AI model was not found.';
+  if (status === 429) return 'The AI quota has been reached. Please try again shortly.';
+  if (status >= 500) return 'The AI service is unavailable.';
+  return 'The AI request could not be processed.';
 };
 
 const parseAiError = async (response: Response): Promise<AiServiceError> => {
@@ -56,7 +56,7 @@ const requestJson = async <T>(url: string, init: RequestInit = { method: 'GET' }
   for (let attempt = 0; attempt <= retries; attempt++) {
     // If user already aborted the operation, stop immediately
     if (init.signal?.aborted) {
-      throw new DOMException('Permintaan dibatalkan oleh pengguna.', 'AbortError');
+      throw new DOMException('Request cancelled by the user.', 'AbortError');
     }
 
     const controller = new AbortController();
@@ -81,11 +81,14 @@ const requestJson = async <T>(url: string, init: RequestInit = { method: 'GET' }
 
       if (!response.ok) {
         const error = await parseAiError(response);
+        if (/\/api\/ai\/(generate|tool-content)$/.test(url)) window.dispatchEvent(new Event('vaani:ai-health-changed'));
         if (!error.retryable || attempt === retries || init.signal?.aborted) throw error;
         await wait(CONFIG.ai.request.retryBaseDelayMs * Math.pow(2, attempt));
         continue;
       }
-      return await response.json();
+      const data = await response.json();
+      if (/\/api\/ai\/(generate|tool-content)$/.test(url) && data.engine === 'cline') window.dispatchEvent(new Event('vaani:ai-health-changed'));
+      return data;
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (init.signal) {
@@ -101,7 +104,7 @@ const requestJson = async <T>(url: string, init: RequestInit = { method: 'GET' }
       
       if (error.name === 'AbortError') {
         throw new AiServiceError(
-          'Permintaan AI melebihi batas waktu (timeout 120 detik). Silakan coba lagi.',
+          'The AI request timed out after 120 seconds. Please try again.',
           'server_error',
           408,
           false
@@ -109,7 +112,7 @@ const requestJson = async <T>(url: string, init: RequestInit = { method: 'GET' }
       }
 
       const networkError = new AiServiceError(
-        'Tidak bisa menghubungi layanan AI. Periksa koneksi internet atau server lokal.',
+        'Could not connect to the AI service. Check your internet connection or local server.',
         'no_internet',
         0,
         true
@@ -119,7 +122,7 @@ const requestJson = async <T>(url: string, init: RequestInit = { method: 'GET' }
     }
   }
 
-  throw new AiServiceError('Permintaan AI gagal setelah beberapa percobaan.', 'server_error', 500, false);
+  throw new AiServiceError('The AI request failed after several attempts.', 'server_error', 500, false);
 };
 
 export const generateAgentActions = async (
@@ -143,7 +146,7 @@ export const generateAgentActions = async (
   },
   signal?: AbortSignal
 ) => {
-  const { aiPreference, geminiApiKey, ollamaBaseUrl, selectedGeminiModel, selectedOllamaModel, selectedVertexModel } = useStore.getState() as any;
+  const { aiPreference, geminiApiKey, ollamaBaseUrl, selectedGeminiModel, selectedOllamaModel, selectedVertexModel, language, boardLanguage, activeChapter, lessonMode } = useStore.getState();
   const apiUrl = (import.meta as any).env.VITE_API_URL || '';
   return requestJson<any>(`${apiUrl}/api/ai/generate`, {
     method: 'POST',
@@ -166,7 +169,12 @@ export const generateAgentActions = async (
       selectedVertexModel,
       intent,
       forceTools,
-      lessonContext
+      lessonContext,
+      lang: language,
+      boardLanguage,
+      activeChapter,
+      lessonMode,
+      sessionId: useStore.getState().currentSessionId
     })
   });
 };
@@ -192,7 +200,7 @@ export interface TelemetryResponse {
     totalOutputTokens: number;
     totalTokens: number;
     totalCostUsd: number;
-    totalCostIdr: number;
+    totalCostInr: number;
     avgLatencyMs: number;
     successRate: number;
     providerCounts: Record<string, number>;

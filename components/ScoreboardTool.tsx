@@ -18,10 +18,10 @@ interface ScoreboardProps {
 }
 
 const DEFAULT_TEAMS: TeamRecord[] = [
-  { id: 1, name: 'Kelompok 1 (Garuda)', score: 0, color: '#3b82f6' },
-  { id: 2, name: 'Kelompok 2 (Rajawali)', score: 0, color: '#10b981' },
-  { id: 3, name: 'Kelompok 3 (Elang)', score: 0, color: '#f59e0b' },
-  { id: 4, name: 'Kelompok 4 (Kancil)', score: 0, color: '#8b5cf6' }
+  { id: 1, name: 'Group 1', score: 0, color: '#3b82f6' },
+  { id: 2, name: 'Group 2', score: 0, color: '#10b981' },
+  { id: 3, name: 'Group 3', score: 0, color: '#f59e0b' },
+  { id: 4, name: 'Group 4', score: 0, color: '#8b5cf6' }
 ];
 
 export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
@@ -38,7 +38,7 @@ export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
     return DEFAULT_TEAMS;
   });
 
-  const title = config?.title || 'Papan Skor & Poin Kelompok';
+  const title = config?.title || 'Group scoreboard';
 
   const playScoreSound = () => {
     try {
@@ -63,7 +63,7 @@ export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
         const newScore = Math.max(0, t.score + delta);
         if (newScore >= 50 && t.score < 50) {
           confetti({ particleCount: 50, spread: 60 });
-          toast.success(`🎉 ${t.name} mencapai 50 poin!`);
+          toast.success(`🎉 ${t.name} reached 50 points!`);
         }
         return { ...t, score: newScore };
       }
@@ -74,7 +74,7 @@ export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
 
   const resetAll = () => {
     setTeams(prev => prev.map(t => ({ ...t, score: 0 })));
-    toast.success('Papan skor di-reset ke 0');
+    toast.success('All scores reset to 0.');
   };
 
   return (
@@ -87,14 +87,14 @@ export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
           </div>
           <div>
             <h4 className="font-extrabold text-slate-900 text-sm tracking-tight">{title}</h4>
-            <span className="text-[10px] text-slate-400 font-bold">{teams.length} Kelompok Bertanding</span>
+            <span className="text-[10px] text-slate-400 font-bold">{teams.length} groups participating</span>
           </div>
         </div>
 
         <button
           onClick={resetAll}
           className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
-          title="Reset Semua Skor"
+          title="Reset all scores"
         >
           <RotateCcw size={14} />
         </button>
@@ -129,28 +129,28 @@ export const ScoreboardTool: React.FC<ScoreboardProps> = ({ config }) => {
               <button
                 onClick={() => updateScore(team.id, -5)}
                 className="py-1 rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-bold transition cursor-pointer"
-                title="-5 Poin"
+                title="-5 points"
               >
                 -5
               </button>
               <button
                 onClick={() => updateScore(team.id, 1)}
                 className="py-1 rounded-lg bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 text-xs font-bold transition cursor-pointer"
-                title="+1 Poin"
+                title="+1 point"
               >
                 +1
               </button>
               <button
                 onClick={() => updateScore(team.id, 5)}
                 className="py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 text-xs font-bold transition cursor-pointer"
-                title="+5 Poin"
+                title="+5 points"
               >
                 +5
               </button>
               <button
                 onClick={() => updateScore(team.id, 10)}
                 className="py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer shadow-2xs"
-                title="+10 Poin"
+                title="+10 points"
               >
                 +10
               </button>

@@ -6,12 +6,12 @@ describe('Jev System 1 Reflex & Classifier Engine', () => {
     let timerToggled = false;
     const mockStore = {
       isTimerOpen: false,
-      toggleTimer: () => { timerToggled = true; }
+      addAction: () => { timerToggled = true; }
     };
 
-    const result = evaluateJevSystemOne('Buka timer 5 menit', mockStore, null);
+    const result = evaluateJevSystemOne('timer 5 minute lagao', mockStore, null);
     expect(result.handled).toBe(true);
-    expect(result.actionTaken).toBe('TOGGLE_TIMER');
+    expect(result.actionTaken).toBe('TIMER');
     expect(timerToggled).toBe(true);
   });
 
@@ -22,7 +22,7 @@ describe('Jev System 1 Reflex & Classifier Engine', () => {
       toggleCalculator: () => { calcToggled = true; }
     };
 
-    const result = evaluateJevSystemOne('Buka kalkulator', mockStore, null);
+    const result = evaluateJevSystemOne('calculator kholo', mockStore, null);
     expect(result.handled).toBe(true);
     expect(result.actionTaken).toBe('TOGGLE_CALCULATOR');
     expect(calcToggled).toBe(true);
@@ -36,7 +36,7 @@ describe('Jev System 1 Reflex & Classifier Engine', () => {
       requestRenderAll: () => {}
     };
 
-    const inResult = evaluateJevSystemOne('perbesar kanvas', {}, mockCanvas);
+    const inResult = evaluateJevSystemOne('zoom in', {}, mockCanvas);
     expect(inResult.handled).toBe(true);
     expect(inResult.actionTaken).toBe('ZOOM_IN');
     expect(currentZoom).toBe(1.25);
@@ -57,7 +57,7 @@ describe('Jev System 1 Reflex & Classifier Engine', () => {
       }
     };
 
-    const result = evaluateJevSystemOne('Ubah cabang fotosintesis dan tambah detail klorofil', mockStore, null);
+    const result = evaluateJevSystemOne('Edit photosynthesis branch and add chlorophyll', mockStore, null);
     expect(result.handled).toBe(false); // Passes to System 2 for deep generation
     expect(result.lockIntent).toBe('modification');
     expect(result.targetObjectId).toBe('web_999');

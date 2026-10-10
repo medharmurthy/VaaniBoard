@@ -80,7 +80,7 @@ export async function executeMultiAgentPlan(params: OrchestratorParams): Promise
   // Worker 1: Fast Visual Diagram Agent (Gemma 4 E2B or Fast Single Turn)
   const visualTaskPromise = (async () => {
     try {
-      const visualPrompt = `Fokus pada pembuatan diagram visual untuk instruksi ini: "${prompt}". Hasilkan render_mermaid atau diagram konsep.`;
+      const visualPrompt = `Focus on creating a visual diagram for this instruction: "${prompt}". Generate render_mermaid or a concept diagram.`;
       const res = await generateAgentActionsOllama(
         visualPrompt,
         '',
@@ -170,7 +170,7 @@ export async function executeMultiAgentPlan(params: OrchestratorParams): Promise
 
   return {
     functionCalls: resolvedCalls,
-    textResponse: combinedTextResponse || 'Saya telah menyiapkan seluruh materi dan alat pembelajaran di papan tulis secara paralel.',
+    textResponse: combinedTextResponse || 'The lesson materials and tools are ready on the board.',
     agentsInvolved,
     telemetry: {
       id: `tel_multiagent_${Date.now()}`,
@@ -178,7 +178,7 @@ export async function executeMultiAgentPlan(params: OrchestratorParams): Promise
       outputTokens: 0,
       totalTokens: 0,
       costUsd: 0,
-      costIdr: 0,
+      costInr: 0,
       latencyMs: 1500,
       provider: preference || 'ollama',
       model: agentsInvolved.join(' + '),

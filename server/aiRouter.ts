@@ -24,9 +24,29 @@ import { CONFIG } from "../constants";
 import { AiPreference } from "../types";
 import { createLogger } from "../utils/logger";
 import { telemetryService } from "./telemetryService";
+import { z } from 'zod';
+import { generateAgentActionsCline } from './cline/clineAdapter';
+import { resolveLocalClassroomCommand } from './cline/localClassroomCommands';
+import { resolveProvider, providerRequestSchema } from './cline/providers';
+import { voiceRouter } from './voiceRouter';
+import { SUPPORTED_LANGUAGES } from '../utils/languages';
+import { classifyClassroomError, classroomRuntimeStatus } from './cline/runtimeHealth';
+import { generateToolContentCline } from './cline/toolContent';
 
 export const aiRouter = Router();
 const logger = createLogger('ai-router');
+async function classroomStatus(input:any) {
+  try {
+    const provider=resolveProvider(input);
+    if (provider.providerId === 'ollama') {
+      const local=await probeOllama(provider.baseUrl,provider.modelId);
+      return {mode:local.online&&local.hasRequiredModel?'ollama':'unavailable',model:provider.modelId,online:local.online&&local.hasRequiredModel,
+        reason:local.online?'model_missing':'local_unavailable',engine:'cline',localToolsAvailable:true,
+        ollamaStatus:{online:local.online,hasModel:!!local.hasRequiredModel,models:local.models,activeModel:local.activeModel}};
+    }
+    return classroomRuntimeStatus(input);
+  } catch {return classroomRuntimeStatus(input);}
+}
 
 aiRouter.use(express.json({ limit: CONFIG.ai.request.bodyLimit }));
 
@@ -213,7 +233,7 @@ aiRouter.post("/pull-model", async (req, res) => {
       });
 
       if (!response.ok || !response.body) {
-        res.write(`data: ${JSON.stringify({ error: `Gagal menarik model (${response.status}): ${response.statusText}` })}\n\n`);
+        res.write(`data: ${JSON.stringify({ error: `Could not pull the model (${response.status}): ${response.statusText}` })}\n\n`);
         res.end();
         return;
       }
@@ -243,7 +263,7 @@ aiRouter.post("/pull-model", async (req, res) => {
       res.write(`data: ${JSON.stringify({ status: 'success', completed: true, model: targetModel })}\n\n`);
       res.end();
     } catch (e: any) {
-      res.write(`data: ${JSON.stringify({ error: e.message || 'Koneksi ke Ollama gagal' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ error: e.message || 'Could not connect to Ollama' })}\n\n`);
       res.end();
     }
   } else {
@@ -255,9 +275,9 @@ aiRouter.post("/pull-model", async (req, res) => {
       });
 
       if (response.ok) {
-        res.json({ success: true, message: `Model ${targetModel} sedang diunduh atau sudah ada.` });
+        res.json({ success: true, message: `Model ${targetModel} is downloading or already installed.` });
       } else {
-        res.status(response.status).json({ success: false, error: `Gagal menarik model: ${response.statusText}` });
+        res.status(response.status).json({ success: false, error: `Could not pull the model: ${response.statusText}` });
       }
     } catch (e: any) {
       res.status(500).json({ success: false, error: e.message });
@@ -270,27 +290,27 @@ const classifyAiError = (error: any): { code: AiErrorCode; status: number; messa
   const status = Number(error?.status || error?.cause?.status || 500);
 
   if (status === 401 || status === 403 || raw.includes('api key') || raw.includes('permission denied')) {
-    return { code: 'invalid_key', status: 401, retryable: false, message: 'Kunci API Gemini tidak valid atau tidak memiliki izin.' };
+    return { code: 'invalid_key', status: 401, retryable: false, message: 'The Gemini API key is invalid or does not have permission.' };
   }
   if (status === 404 || raw.includes('not found') || raw.includes('model')) {
-    return { code: 'model_not_found', status: 404, retryable: false, message: 'Model AI yang dikonfigurasi tidak ditemukan.' };
+    return { code: 'model_not_found', status: 404, retryable: false, message: 'The configured AI model was not found.' };
   }
   if (raw.includes('spending cap') || raw.includes('spend cap') || raw.includes('resource_exhausted')) {
     return { 
       code: 'rate_limited', 
       status: 429, 
       retryable: false, 
-      message: 'Batas anggaran bulanan (spending cap) untuk kunci API Gemini Anda di Google AI Studio telah terlampaui. Silakan gunakan penyedia AI lain (seperti Vertex AI atau Ollama lokal) di menu Pengaturan, atau perbarui kunci API Anda.' 
+      message: 'The monthly spending cap for your Gemini API key in Google AI Studio has been exceeded. Please switch to another AI provider (such as Vertex AI or local Ollama) in Settings, or update your API key.'
     };
   }
   if (status === 429 || raw.includes('quota') || raw.includes('rate')) {
-    return { code: 'rate_limited', status: 429, retryable: true, message: 'Kuota atau batas permintaan AI sedang tercapai. Coba lagi sebentar.' };
+    return { code: 'rate_limited', status: 429, retryable: true, message: 'The AI quota or request limit has been reached. Please try again shortly.' };
   }
   if (raw.includes('fetch failed') || raw.includes('network') || raw.includes('timeout') || raw.includes('econnrefused')) {
-    return { code: raw.includes('localhost') || raw.includes('11434') ? 'local_unavailable' : 'no_internet', status: 503, retryable: true, message: raw.includes('localhost') || raw.includes('11434') ? 'Ollama lokal belum dapat dihubungi.' : 'Koneksi internet ke layanan AI sedang bermasalah.' };
+    return { code: raw.includes('localhost') || raw.includes('11434') ? 'local_unavailable' : 'no_internet', status: 503, retryable: true, message: raw.includes('localhost') || raw.includes('11434') ? 'Local Ollama cannot be reached yet.' : 'The internet connection to the AI service is having problems.' };
   }
 
-  return { code: 'server_error', status, retryable: false, message: 'Layanan AI mengalami kesalahan tak terduga.' };
+  return { code: 'server_error', status, retryable: false, message: 'The AI service hit an unexpected error.' };
 };
 
 const sendAiError = (res: Response, error: unknown) => {
@@ -334,10 +354,12 @@ const getCandidateModes = (
 };
 
 aiRouter.get("/status", async (req, res) => {
+  if (process.env.AI_ENGINE !== 'legacy') return res.json(await classroomStatus({}));
   res.json(await getAvailableMode());
 });
 
 aiRouter.post("/status", async (req, res) => {
+  if (process.env.AI_ENGINE !== 'legacy') return res.json(await classroomStatus(req.body || {}));
   const { aiPreference, geminiApiKey, ollamaBaseUrl, selectedOllamaModel, selectedVertexModel, selectedGeminiModel } = req.body;
   const status = await getAvailableMode(geminiApiKey, ollamaBaseUrl, selectedOllamaModel);
 
@@ -361,18 +383,33 @@ aiRouter.post("/status", async (req, res) => {
   res.json(status);
 });
 
-aiRouter.get("/whisper-status", async (_req, res) => {
-  const available = await isWhisperAvailable();
-  res.json({
-    available,
-    engine: "faster-whisper",
-    model: "base",
-    device: "cpu",
-    supportedLanguages: ["id", "en", "ar", "zh", "fr", "ru", "es", "ja", "ko", "de", "pt"]
-  });
-});
+aiRouter.get('/whisper-status', (_req, res) => res.status(410).json({ available: false, engine: 'sarvam', error: 'Speech is Sarvam-only. Use /api/voice/status.' }));
 
 aiRouter.post("/generate", async (req, res) => {
+  if (process.env.AI_ENGINE !== 'legacy') {
+    const supportedLanguage = z.enum(SUPPORTED_LANGUAGES.map(p => p.code));
+    const parsed = providerRequestSchema.extend({prompt:z.string().trim().min(1).max(120000),canvasObjects:z.array(z.any()).max(300).default([]),
+      lang: supportedLanguage.optional(), boardLanguage: supportedLanguage.optional(),
+      viewport:z.object({width:z.number().positive().max(50000),height:z.number().positive().max(50000)}).default({width:1280,height:720}),
+      domElements:z.record(z.string(),z.any()).default({})}).passthrough().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({error:'Invalid classroom request.',code:'invalid_request'});
+    const controller = new AbortController();
+    let providerId: string | undefined;
+    const onClose = () => { if (!res.writableEnded) controller.abort(); };
+    res.on('close',onClose);
+    try {
+      const local = resolveLocalClassroomCommand(parsed.data);
+      // Deterministic operations deliberately avoid paid model calls. Creative commands use Cline.
+      if (!local) providerId = resolveProvider(parsed.data).providerId;
+      const result = local || await generateAgentActionsCline({...parsed.data,signal:controller.signal});
+      if (!res.writableEnded && !controller.signal.aborted) return res.json(result);
+    } catch (error:any) {
+      if (controller.signal.aborted) return;
+      const {status,...failure} = classifyClassroomError(error, providerId);
+      return res.status(status).json(failure);
+    } finally { res.off('close',onClose); }
+    return;
+  }
   const startTime = Date.now();
   const { prompt, canvasImageBase64, canvasObjects, viewport, highResInputImage, history, pageContext, domElements, aiPreference, geminiApiKey, ollamaBaseUrl, selectedGeminiModel, selectedOllamaModel, selectedVertexModel, intent, forceTools, lessonContext, sessionId } = req.body;
   const activeSessionId = sessionId || (req.headers['x-session-id'] as string) || 'session_default';
@@ -409,11 +446,11 @@ aiRouter.post("/generate", async (req, res) => {
         latencyMs: Date.now() - startTime,
         status: 'error',
         errorCode: reason,
-        errorMessage: `Layanan ${serviceName} tidak tersedia.`
+        errorMessage: `${serviceName} service is not available.`
       });
 
       return res.status(503).json({
-        error: `Layanan ${serviceName} tidak tersedia.`,
+        error: `${serviceName} service is not available.`,
         code: reason === 'invalid_key' || reason === 'missing_project' ? 'invalid_key' : 'no_internet',
         retryable: true
       });
@@ -464,7 +501,7 @@ aiRouter.post("/generate", async (req, res) => {
 
     if (!success) {
       const errDetail = lastError?.message ? ` (${lastError.message})` : '';
-      throw lastError || new Error(`Semua penyedia AI yang dikonfigurasi gagal memproses permintaan.${errDetail}`);
+      throw lastError || new Error(`All configured AI providers failed to process the request.${errDetail}`);
     }
 
     const duration = Date.now() - startTime;
@@ -497,7 +534,7 @@ aiRouter.post("/generate", async (req, res) => {
         outputTokens: teleRecord.outputTokens,
         totalTokens: teleRecord.totalTokens,
         costUsd: teleRecord.costUsd,
-        costIdr: teleRecord.costIdr,
+        costInr: teleRecord.costInr,
         latencyMs: teleRecord.latencyMs,
         provider: teleRecord.provider,
         model: teleRecord.model,
@@ -523,6 +560,13 @@ aiRouter.post("/generate", async (req, res) => {
 });
 
 aiRouter.post("/tool-content", async (req, res) => {
+  if (process.env.AI_ENGINE !== 'legacy') {
+    const parsed = providerRequestSchema.extend({toolId:z.enum(['mindmap','quiz','summary']),prompt:z.string().trim().min(1).max(30000)}).passthrough().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({error:'Choose mindmap, quiz or summary with a non-empty prompt. Generated websites are not classroom tools.',code:'invalid_request',retryable:false});
+    let providerId: string | undefined;
+    try { providerId = resolveProvider(parsed.data).providerId; return res.json({result:await generateToolContentCline(parsed.data),engine:'cline',provider:providerId}); }
+    catch (error) {const {status,...failure}=classifyClassroomError(error,providerId);return res.status(status).json(failure);}
+  }
   const startTime = Date.now();
   const { toolId, prompt, aiPreference, geminiApiKey, ollamaBaseUrl, selectedGeminiModel, selectedOllamaModel, selectedVertexModel, sessionId } = req.body;
   const activeSessionId = sessionId || (req.headers['x-session-id'] as string) || 'session_default';
@@ -545,9 +589,9 @@ aiRouter.post("/tool-content", async (req, res) => {
         latencyMs: Date.now() - startTime,
         status: 'error',
         errorCode: 'no_internet',
-        errorMessage: 'Layanan AI belum tersedia.'
+        errorMessage: 'The AI service is not available yet.'
       });
-      return res.status(503).json({ error: 'Layanan AI belum tersedia.', code: 'no_internet', retryable: true });
+      return res.status(503).json({ error: 'The AI service is not available yet.', code: 'no_internet', retryable: true });
     }
 
     let result;
@@ -577,7 +621,7 @@ aiRouter.post("/tool-content", async (req, res) => {
     }
 
     if (!success) {
-      throw lastError || new Error("Semua penyedia AI yang dikonfigurasi gagal memproses konten alat.");
+      throw lastError || new Error("All configured AI providers failed to generate the tool content.");
     }
 
     const duration = Date.now() - startTime;
@@ -603,7 +647,7 @@ aiRouter.post("/tool-content", async (req, res) => {
         id: teleRecord.id,
         totalTokens: teleRecord.totalTokens,
         costUsd: teleRecord.costUsd,
-        costIdr: teleRecord.costIdr,
+        costInr: teleRecord.costInr,
         latencyMs: teleRecord.latencyMs,
         provider: teleRecord.provider,
         model: teleRecord.model
@@ -627,98 +671,11 @@ aiRouter.post("/tool-content", async (req, res) => {
   }
 });
 
-aiRouter.post("/transcribe", async (req, res) => {
-  const startTime = Date.now();
-  const { base64Audio, aiPreference, geminiApiKey, ollamaBaseUrl, selectedGeminiModel, selectedOllamaModel, selectedVertexModel, sessionId } = req.body;
-  const activeSessionId = sessionId || (req.headers['x-session-id'] as string) || 'session_default';
-  let activeMode: 'vertex' | 'gemini' | 'ollama' | 'unknown' = 'unknown';
-  let activeModel = 'unknown';
-
-  try {
-    const configuredMode = getRuntimePreference(aiPreference);
-    const status = await getAvailableMode(geminiApiKey, ollamaBaseUrl, selectedOllamaModel);
-
-    const candidateModes = getCandidateModes(configuredMode, status, geminiApiKey);
-
-    if (candidateModes.length === 0 || status.mode === 'unavailable') {
-      return res.status(503).json({ error: 'Transkripsi suara membutuhkan Gemini atau layanan lokal yang tersedia.', code: 'no_internet', retryable: true });
-    }
-
-    let text = "";
-    let lastError: any = null;
-    let success = false;
-
-    for (const mode of candidateModes) {
-      try {
-        logger.info(`Attempting /transcribe with mode: ${mode}`);
-        activeMode = mode;
-        if (mode === 'vertex') {
-          activeModel = selectedVertexModel || CONFIG.ai.vertex.model;
-          text = await transcribeAudioVertex(base64Audio, selectedVertexModel);
-        } else if (mode === 'gemini') {
-          activeModel = selectedGeminiModel || getGeminiModel();
-          text = await transcribeAudioGemini(base64Audio, geminiApiKey, selectedGeminiModel);
-        } else if (mode === 'ollama') {
-          activeModel = selectedOllamaModel || status.ollamaStatus?.activeModel || getOllamaModel();
-          logger.info(`[Router] Attempting offline Faster-Whisper transcription for language: ${req.body.language || 'auto'}...`);
-          text = await transcribeAudioWhisper(base64Audio, req.body.language || 'auto');
-          success = true;
-          break;
-        }
-        success = true;
-        break;
-      } catch (err: any) {
-        logger.warn(`Transcribe failed with mode: ${mode}. Error: ${err.message || err}`);
-        lastError = err;
-      }
-    }
-
-    if (!success) {
-      throw lastError || new Error("Semua penyedia AI yang dikonfigurasi gagal melakukan transkripsi.");
-    }
-
-    const duration = Date.now() - startTime;
-    const approxTokens = Math.round((text.length / 4) + 256);
-
-    const teleRecord = telemetryService.recordEvent({
-      sessionId: activeSessionId,
-      endpoint: '/api/ai/transcribe',
-      provider: activeMode,
-      model: activeModel,
-      prompt: '[Audio Recording Transcription]',
-      promptTokens: 256,
-      outputTokens: Math.round(text.length / 4),
-      latencyMs: duration,
-      status: 'success',
-      responseText: text
-    });
-
-    res.json({
-      text,
-      telemetry: {
-        id: teleRecord.id,
-        totalTokens: approxTokens,
-        costUsd: teleRecord.costUsd,
-        costIdr: teleRecord.costIdr,
-        latencyMs: teleRecord.latencyMs
-      }
-    });
-  } catch (error: any) {
-    const duration = Date.now() - startTime;
-    telemetryService.recordEvent({
-      sessionId: activeSessionId,
-      endpoint: '/api/ai/transcribe',
-      provider: activeMode,
-      model: activeModel,
-      prompt: '[Audio Recording Transcription]',
-      latencyMs: duration,
-      status: 'error',
-      errorCode: error?.code || 'server_error',
-      errorMessage: error?.message || String(error)
-    });
-    logger.error("Transcribe error", error);
-    sendAiError(res, error);
-  }
+// Compatibility alias shares the same Sarvam-only input validation and provider policy.
+aiRouter.use('/transcribe', (req, res, next) => {
+  const original = req.url;
+  req.url = '/stt';
+  voiceRouter(req, res, error => { req.url = original; next(error); });
 });
 
 // ── TELEMETRY & GOOGLE SHEETS API ROUTES ───────────────────────────────────

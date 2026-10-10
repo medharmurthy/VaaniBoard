@@ -14,7 +14,7 @@ async function build() {
     entryPoints: ['server.ts'],
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node22',
     format: 'cjs',
     outfile: 'dist-electron/server-bundle.cjs',
     external: [
@@ -26,6 +26,7 @@ async function build() {
       'socket.io',
       'express',
       'vite',
+      '@cline/sdk', '@cline/core', '@cline/agents', '@cline/llms', '@cline/shared',
       '@google/genai',
       '@google-cloud/vertexai'
     ], // Leave native/heavy deps external so electron-builder packs them
@@ -38,7 +39,7 @@ async function build() {
     entryPoints: { 'main': 'electron/main.ts' },
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node22',
     format: 'cjs',
     outExtension: { '.js': '.cjs' },
     outdir: 'dist-electron',
@@ -49,7 +50,7 @@ async function build() {
     entryPoints: { 'preload': 'electron/preload.ts' },
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node22',
     format: 'cjs',
     outExtension: { '.js': '.cjs' },
     outdir: 'dist-electron',

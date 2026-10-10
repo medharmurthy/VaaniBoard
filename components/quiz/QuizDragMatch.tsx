@@ -56,7 +56,7 @@ export const QuizDragMatch: React.FC<QuizDragMatchProps> = ({ config }) => {
         <div className="bg-fuchsia-100 p-1.5 rounded-md">
             <svg className="w-5 h-5 text-fuchsia-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"></path></svg>
         </div>
-        <span className="text-sm font-bold text-fuchsia-600 uppercase tracking-wide">Cocokkan Pasangan</span>
+        <span className="text-sm font-bold text-fuchsia-600 uppercase tracking-wide">Match the pairs</span>
       </div>
 
       <div className="flex-1 overflow-auto mb-4 custom-scrollbar">
@@ -124,14 +124,14 @@ export const QuizDragMatch: React.FC<QuizDragMatchProps> = ({ config }) => {
              onClick={() => setSubmitted(true)}
              className="w-full bg-slate-800 font-bold text-white py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(15,23,42,0.39)] hover:bg-slate-900 transition disabled:opacity-50 disabled:shadow-none no-print"
            >
-             Cek Jawaban
+             Check answers
            </button>
         ) : (
            <button 
              onClick={() => { setMatches({}); setSubmitted(false); setSelectedLeft(null); }}
              className="w-full bg-white border border-slate-200 font-bold text-slate-600 py-3 block text-center rounded-xl hover:bg-slate-50 transition drop-shadow-sm no-print"
            >
-             Ulangi
+             Try again
            </button>
         )}
       </div>

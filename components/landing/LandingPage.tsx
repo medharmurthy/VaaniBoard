@@ -1,4 +1,4 @@
-import { MotionConfig, motion, useScroll, useSpring } from "framer-motion";
+import { MotionConfig, motion, useScroll, useSpring } from "motion/react";
 import { I18nProvider } from "./i18n";
 import Navbar from "./Navbar";
 import Hero from "./Hero";

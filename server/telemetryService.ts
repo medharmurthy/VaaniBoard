@@ -18,7 +18,7 @@ export interface TelemetryRecord {
   totalTokens: number;
   thinkingTokens: number;
   costUsd: number;
-  costIdr: number;
+  costInr: number;
   latencyMs: number;
   status: 'success' | 'error';
   errorCode?: string;
@@ -39,7 +39,7 @@ export interface TelemetrySummary {
   totalOutputTokens: number;
   totalTokens: number;
   totalCostUsd: number;
-  totalCostIdr: number;
+  totalCostInr: number;
   avgLatencyMs: number;
   successRate: number;
   providerCounts: Record<string, number>;
@@ -63,8 +63,9 @@ const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
   'gemini-1.5-flash': { input: 0.15, output: 0.60 },
   'gemini-flash': { input: 0.15, output: 0.60 },
   // Gemini Flash Lite tier
-  'gemini-3.5-flash-lite': { input: 0.075, output: 0.30 },
-  'gemini-2.5-flash-lite': { input: 0.075, output: 0.30 },
+  // Standard Gemini API text/image prices verified 10 Oct 2026; not Batch/Flex prices.
+  'gemini-3.5-flash-lite': { input: 0.30, output: 2.50 },
+  'gemini-2.5-flash-lite': { input: 0.10, output: 0.40 },
   'gemini-1.5-flash-8b': { input: 0.075, output: 0.30 },
   // Gemini Pro tier
   'gemini-3.8-pro': { input: 1.25, output: 5.00 },
@@ -77,7 +78,7 @@ const PRICING_PER_MILLION: Record<string, { input: number; output: number }> = {
   'ollama': { input: 0, output: 0 }
 };
 
-const USD_TO_IDR_RATE = 16300;
+const USD_TO_INR_RATE = Number(process.env.USD_TO_INR_RATE || 84);
 const TELEMETRY_DIR = path.join(process.cwd(), 'data');
 const TELEMETRY_FILE = path.join(TELEMETRY_DIR, 'trido_telemetry.json');
 const CONFIG_FILE = path.join(TELEMETRY_DIR, 'telemetry_config.json');
@@ -89,7 +90,7 @@ class TelemetryService {
     googleSheetId: process.env.GOOGLE_SHEET_ID || '',
     googleSheetName: process.env.GOOGLE_SHEET_NAME || 'Trido_Telemetry',
     googleSheetWebhookUrl: process.env.GOOGLE_SHEET_WEBHOOK_URL || '',
-    autoSync: true
+    autoSync: false
   };
   private isSaving = false;
   private pendingSave = false;
@@ -186,7 +187,7 @@ class TelemetryService {
     }
   }
 
-  public calculateCost(model: string, inputTokens: number, outputTokens: number): { costUsd: number; costIdr: number } {
+  public calculateCost(model: string, inputTokens: number, outputTokens: number): { costUsd: number; costInr: number } {
     const cleanModel = (model || '').toLowerCase().trim();
     let pricing = PRICING_PER_MILLION[cleanModel];
 
@@ -199,14 +200,14 @@ class TelemetryService {
     const inputCost = (inputTokens / 1_000_000) * pricing.input;
     const outputCost = (outputTokens / 1_000_000) * pricing.output;
     const totalUsd = Number((inputCost + outputCost).toFixed(6));
-    const totalIdr = Number((totalUsd * USD_TO_IDR_RATE).toFixed(2));
+    const totalInr = Number((totalUsd * USD_TO_INR_RATE).toFixed(2));
 
-    return { costUsd: totalUsd, costIdr: totalIdr };
+    return { costUsd: totalUsd, costInr: totalInr };
   }
 
   private formatLocalTime(date: Date = new Date()): string {
-    return date.toLocaleString('id-ID', {
-      timeZone: 'Asia/Jakarta',
+    return date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -239,10 +240,10 @@ class TelemetryService {
       return {
         id: `tel_archived_${Date.now()}`,
         timestamp: new Date().toISOString(),
-        timestampLocal: new Date().toLocaleString('id-ID'),
+        timestampLocal: new Date().toLocaleString('en-IN'),
         sessionId: params.sessionId || 'session_archived',
         endpoint: params.endpoint || '/api/ai/generate',
-        prompt: (params.prompt || '').slice(0, 100),
+        prompt: process.env.TELEMETRY_CONTENT_OPT_IN === 'true' ? (params.prompt || '').slice(0, 120) : '[redacted]',
         model: params.model || 'gemini-3.8-flash',
         provider: params.provider || 'vertex',
         promptTokens: 0,
@@ -250,7 +251,7 @@ class TelemetryService {
         thinkingTokens: 0,
         totalTokens: 0,
         costUsd: 0,
-        costIdr: 0,
+        costInr: 0,
         latencyMs: params.latencyMs || 0,
         status: params.status || 'success',
         actionsCount: (params.functionCalls || []).length,
@@ -265,7 +266,7 @@ class TelemetryService {
     const outputTok = Number(params.outputTokens || 0);
     const thinkingTok = Number(params.thinkingTokens || 0);
     const totalTok = promptTok + outputTok;
-    const { costUsd, costIdr } = this.calculateCost(params.model, promptTok, outputTok);
+    const { costUsd, costInr } = this.calculateCost(params.model, promptTok, outputTok);
 
     const calls = params.functionCalls || [];
     const actionCounts: Record<string, number> = {};
@@ -282,7 +283,8 @@ class TelemetryService {
       .trim()
       .slice(0, 300);
 
-    const cleanPrompt = (params.prompt || '').trim();
+    const allowContent = process.env.TELEMETRY_CONTENT_OPT_IN === 'true';
+    const cleanPrompt = allowContent ? (params.prompt || '').trim().slice(0,120) : '[redacted]';
 
     const record: TelemetryRecord = {
       id: `tel_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -298,14 +300,14 @@ class TelemetryService {
       totalTokens: totalTok,
       thinkingTokens: thinkingTok,
       costUsd,
-      costIdr,
+      costInr,
       latencyMs: params.latencyMs,
       status: params.status,
       errorCode: params.errorCode,
       errorMessage: params.errorMessage,
       actionsCount: calls.length,
       actionsSummary,
-      responseTextSnippet: snippet,
+      responseTextSnippet: allowContent ? snippet.slice(0,120) : '[redacted]',
       canvasObjectsCount: params.canvasObjectsCount || 0,
       domElementsCount: params.domElementsCount || 0,
       sheetSyncStatus: (this.config.googleSheetWebhookUrl || this.config.googleSheetId) && this.config.autoSync ? 'pending' : 'disabled'
@@ -336,7 +338,7 @@ class TelemetryService {
         severity: record.status === 'success' ? 'INFO' : 'ERROR',
         message: `[Trido AI Telemetry] ${record.provider}/${record.model} - ${record.totalTokens} tokens - $${record.costUsd.toFixed(6)} (${record.latencyMs}ms)`,
         'logging.googleapis.com/labels': {
-          project: 'gemma4good-494311',
+          project: process.env.GOOGLE_CLOUD_PROJECT || '',
           service: 'trido-ai',
           provider: record.provider,
           model: record.model,
@@ -354,7 +356,7 @@ class TelemetryService {
           },
           cost: {
             usd: record.costUsd,
-            idr: record.costIdr
+            inr: record.costInr
           },
           performance: {
             latencyMs: record.latencyMs
@@ -396,7 +398,7 @@ class TelemetryService {
     let totalOutputTokens = 0;
     let totalTokens = 0;
     let totalCostUsd = 0;
-    let totalCostIdr = 0;
+    let totalCostInr = 0;
     let totalLatency = 0;
     let successCount = 0;
     let syncedToSheetCount = 0;
@@ -409,7 +411,7 @@ class TelemetryService {
       totalOutputTokens += r.outputTokens || 0;
       totalTokens += r.totalTokens || 0;
       totalCostUsd += r.costUsd || 0;
-      totalCostIdr += r.costIdr || 0;
+      totalCostInr += r.costInr || 0;
       totalLatency += r.latencyMs || 0;
       if (r.status === 'success') successCount++;
       if (r.sheetSyncStatus === 'synced') syncedToSheetCount++;
@@ -425,7 +427,7 @@ class TelemetryService {
       totalOutputTokens,
       totalTokens,
       totalCostUsd: Number(totalCostUsd.toFixed(6)),
-      totalCostIdr: Math.round(totalCostIdr),
+      totalCostInr: Math.round(totalCostInr),
       avgLatencyMs: totalRequests > 0 ? Math.round(totalLatency / totalRequests) : 0,
       successRate: totalRequests > 0 ? Number(((successCount / totalRequests) * 100).toFixed(1)) : 100,
       providerCounts,
@@ -459,7 +461,7 @@ class TelemetryService {
       'Total Tokens',
       'Thinking Tokens',
       'Biaya (USD)',
-      'Biaya (IDR)',
+      'Biaya (INR)',
       'Latensi (ms)',
       'Status',
       'Jumlah Aksi',
@@ -491,7 +493,7 @@ class TelemetryService {
       r.totalTokens,
       r.thinkingTokens || 0,
       r.costUsd.toFixed(6),
-      Math.round(r.costIdr),
+      Math.round(r.costInr),
       r.latencyMs,
       escapeCsv(r.status),
       r.actionsCount,
@@ -531,7 +533,7 @@ class TelemetryService {
               outputTokens: record.outputTokens,
               totalTokens: record.totalTokens,
               costUsd: record.costUsd,
-              costIdr: record.costIdr,
+              costInr: record.costInr,
               latencyMs: record.latencyMs,
               status: record.status,
               actionsSummary: record.actionsSummary,
@@ -581,7 +583,7 @@ class TelemetryService {
           record.outputTokens,
           record.totalTokens,
           record.costUsd.toFixed(6),
-          Math.round(record.costIdr),
+          Math.round(record.costInr),
           record.latencyMs,
           record.status,
           record.actionsSummary,
@@ -682,7 +684,7 @@ function doPost(e) {
     var headers = [
       "ID Log", "Waktu (WIB)", "Waktu (ISO)", "ID Sesi", "Endpoint",
       "Provider AI", "Model", "Prompt User", "Input Tokens", "Output Tokens",
-      "Total Tokens", "Biaya (USD)", "Biaya (IDR)", "Latensi (ms)", "Status",
+      "Total Tokens", "Biaya (USD)", "Biaya (INR)", "Latensi (ms)", "Status",
       "Aksi & Tools", "Ringkasan Respon AI", "UX Rating", "UX Feedback", "Error"
     ];
     
@@ -697,7 +699,7 @@ function doPost(e) {
     var r = data.row || {};
     var rowData = [
       r.id || "",
-      r.timestampLocal || new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
+      r.timestampLocal || new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
       r.timestamp || new Date().toISOString(),
       r.sessionId || "",
       r.endpoint || "",
@@ -708,7 +710,7 @@ function doPost(e) {
       r.outputTokens || 0,
       r.totalTokens || 0,
       r.costUsd || 0,
-      r.costIdr || 0,
+      r.costInr || 0,
       r.latencyMs || 0,
       r.status || "success",
       r.actionsSummary || "",

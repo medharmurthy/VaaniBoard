@@ -1,373 +1,98 @@
-/**
- * Trido Hands-Free Ambient Classroom Listener Hook
- * Enables hands-free ambient classroom voice interaction for teachers (Pak Damar Standard).
- * Supports zero-touch spoken commands:
- *  - "Trido, buka timer 5 menit"
- *  - "Trido, presensi siswa"
- *  - "Trido, acak giliran" (Spin wheel)
- *  - "Trido, buka kalkulator"
- *  - "Trido, buat kuis"
- *  - "Trido, pusatkan layar"
- *  - "Trido, bersihkan papan"
- *  - "Trido, buat peta konsep [topik]"
- */
-
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { toast } from '../utils/toast';
 import { sounds } from '../utils/sounds';
-import { createLogger } from '../utils/logger';
+import { resolveSpeechLanguage } from '../utils/warningLanguage';
 
-const logger = createLogger('ambient-listener');
-
-export interface HandsFreeCommandResult {
-  matched: boolean;
-  action: string;
-  detail?: string;
-}
-
+export interface HandsFreeCommandResult { matched: boolean; action: string; detail?: string }
 export function matchAndExecuteHandsFreeCommand(rawText: string): HandsFreeCommandResult {
-  const text = rawText.toLowerCase().trim();
-  const store = useStore.getState();
-
-  // Strip wake words if present
-  const clean = text.replace(/^(hai|halo|hey|ok|oke|tolong)?\s*trido[,.]?\s*/i, '').trim();
-
-  // 1. Timer: "pasang timer 5 menit", "buka timer", "timer 10 menit"
-  const timerMatch = clean.match(/(?:buka\s+)?timer(?:\s+(\d+))?\s*(?:menit|mnt|min)?/i) || text.match(/timer/i);
-  if (timerMatch || clean.includes('waktu') || clean.includes('hitung mundur')) {
-    const minutes = timerMatch && timerMatch[1] ? parseInt(timerMatch[1], 10) : 5;
-    const id = `timer_${Date.now()}`;
-    store.updateDomElement(id, {
-      id,
-      html: '<div>Timer</div>',
-      componentType: 'TIMER',
-      config: { seconds: minutes * 60, mode: 'TIMER' },
-      x: 960,
-      y: 540,
-      width: 320,
-      height: 380,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      zIndex: 15
-    });
-    sounds.play('success');
-    toast.success(`⏱️ Hands-Free: Timer ${minutes} menit aktif di papan!`);
-    return { matched: true, action: 'TIMER', detail: `${minutes} menit` };
-  }
-
-  // 2. Attendance / Presensi: "buka absen", "presensi siswa", "absensi"
-  if (clean.includes('absen') || clean.includes('presensi') || clean.includes('kehadiran')) {
-    store.toggleAttendance();
-    sounds.play('success');
-    toast.success('👥 Hands-Free: Daftar Presensi Siswa dibuka!');
-    return { matched: true, action: 'ATTENDANCE' };
-  }
-
-  // 3. Random Wheel: "putar roda", "acak giliran", "roda acak", "siapa giliran"
-  if (clean.includes('putar roda') || clean.includes('acak giliran') || clean.includes('roda acak') || clean.includes('giliran')) {
-    const id = `wheel_${Date.now()}`;
-    store.updateDomElement(id, {
-      id,
-      html: '<div>Roda</div>',
-      componentType: 'SPIN_WHEEL',
-      config: { title: 'Giliran Menjawab Siswa' },
-      x: 960,
-      y: 540,
-      width: 440,
-      height: 480,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0,
-      zIndex: 15
-    });
-    sounds.play('success');
-    toast.success('🎲 Hands-Free: Roda Acak Siswa aktif!');
-    return { matched: true, action: 'SPIN_WHEEL' };
-  }
-
-  // 4. Calculator: "buka kalkulator", "hitung"
-  if (clean.includes('kalkulator') || clean.includes('calculator') || clean.includes('hitung angka')) {
-    store.toggleCalculator();
-    sounds.play('success');
-    toast.success('🧮 Hands-Free: Kalkulator Sains dibuka!');
-    return { matched: true, action: 'CALCULATOR' };
-  }
-
-  // 5. Quiz: "buat kuis", "mulai kuis", "buka kuis"
-  if (clean.includes('kuis') || clean.includes('quiz') || clean.includes('ulangan')) {
-    store.toggleQuiz();
-    sounds.play('success');
-    toast.success('❓ Hands-Free: Kuis Interaktif dibuka!');
-    return { matched: true, action: 'QUIZ' };
-  }
-
-  // 6. Reset camera / Pusatkan layar: "pusatkan layar", "reset kamera", "tengah"
-  if (clean.includes('pusatkan') || clean.includes('reset kamera') || clean.includes('tengah')) {
-    store.setViewport(1, [1, 0, 0, 1, 0, 0]);
-    sounds.play('success');
-    toast.success('🧭 Hands-Free: Tampilan kanvas dipusatkan!');
-    return { matched: true, action: 'RESET_VIEWPORT' };
-  }
-
-  // 7. Clear canvas: "bersihkan papan", "hapus papan", "hapus coretan"
-  if (clean.includes('bersihkan papan') || clean.includes('hapus papan') || clean.includes('hapus semua coretan')) {
-    window.dispatchEvent(new CustomEvent('clearCanvas'));
-    sounds.play('pop');
-    toast.info('🧹 Hands-Free: Papan tulis dibersihkan!');
-    return { matched: true, action: 'CLEAR_CANVAS' };
-  }
-
-  // 8. General AI Command / Mindmap: "buat peta konsep ...", "jelaskan ..."
-  if (clean.includes('peta konsep') || clean.includes('mindmap') || clean.startsWith('buatkan') || clean.startsWith('jelaskan')) {
-    store.setChatInputText(rawText);
-    if (!store.isAiDrawerOpen) store.toggleAiDrawer();
-    sounds.play('pop');
-    toast.info(`💡 Hands-Free: Meneruskan ke Asisten AI: "${clean.slice(0, 36)}..."`);
-    return { matched: true, action: 'AI_ASSISTANT', detail: clean };
-  }
-
-  return { matched: false, action: 'UNKNOWN' };
+  const wake = rawText.match(/^(?:hey\s+)?(?:vaani|वाणी)[,\s]+(?:suno\s+)?(.+)$/i);
+  if (!wake) return { matched: false, action: 'UNKNOWN' };
+  const command = wake[1].trim();
+  useStore.getState().setLastVoiceCommand(command);
+  window.dispatchEvent(new CustomEvent('vaani:voice-command', { detail: command }));
+  return { matched: true, action: 'AI_ASSISTANT', detail: command };
 }
+export interface UseAmbientListenerOptions { onTranscriptDetected?: (transcript: string) => void; sliceIntervalMs?: number }
 
-export interface UseAmbientListenerOptions {
-  onTranscriptDetected?: (transcript: string) => void;
-  sliceIntervalMs?: number;
-}
-
+/** Each Sarvam clip is a standalone recording, not an undecodable slice of a WebM stream. */
 export function useAmbientListener(options: UseAmbientListenerOptions = {}) {
-  const { sliceIntervalMs = 5000 } = options;
-  const isHandsFreeListening = useStore((s) => s.isHandsFreeListening);
-  const setHandsFreeListening = useStore((s) => s.setHandsFreeListening);
-  const setLastVoiceCommand = useStore((s) => s.setLastVoiceCommand);
+  const isAmbientActive = useStore(s => s.isHandsFreeListening);
+  const [isProcessingSnippet, setProcessing] = useState(false);
+  const [interimCaption, setCaption] = useState('');
+  const active = useRef(false);
+  const stream = useRef<MediaStream | null>(null);
+  const recorder = useRef<MediaRecorder | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const request = useRef<AbortController | null>(null);
+  const starting = useRef(false);
+  const callbacks = useRef(options); callbacks.current = options;
 
-  const [isProcessingSnippet, setIsProcessingSnippet] = useState(false);
-  const [interimCaption, setInterimCaption] = useState('');
-
-  const speechRecognitionRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const intervalTimerRef = useRef<any>(null);
-  const isAmbientActiveRef = useRef(isHandsFreeListening);
-
-  useEffect(() => {
-    isAmbientActiveRef.current = isHandsFreeListening;
-  }, [isHandsFreeListening]);
-
-  // Faster-Whisper slice audio buffer fallback for environments without Web Speech API
-  const transcribeAudioSnippet = async (audioBlob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        try {
-          const base64Audio = reader.result as string;
-          if (!base64Audio || base64Audio.length < 500) {
-            resolve('');
-            return;
-          }
-
-          const res = await fetch('/api/ai/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audio: base64Audio,
-              language: useStore.getState().language || 'id',
-              model: 'tiny',
-              mode: 'faster_whisper'
-            })
-          });
-
-          if (!res.ok) {
-            resolve('');
-            return;
-          }
-
-          const data = await res.json();
-          resolve(data.text?.trim() || '');
-        } catch (err) {
-          logger.warn('[Ambient Listener] Snippet transcription error', err);
-          resolve('');
-        }
-      };
-      reader.onerror = () => reject(new Error('FileReader failed'));
-      reader.readAsDataURL(audioBlob);
-    });
-  };
-
-  const processAudioBuffer = useCallback(async () => {
-    if (audioChunksRef.current.length === 0 || isProcessingSnippet) return;
-
-    const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-    audioChunksRef.current = [];
-
-    if (audioBlob.size < 2000) return;
-
-    setIsProcessingSnippet(true);
-    try {
-      const transcript = await transcribeAudioSnippet(audioBlob);
-      if (transcript && transcript.length > 3) {
-        logger.info('[Ambient Listener] Faster-Whisper detected:', { transcript });
-        setLastVoiceCommand(transcript);
-        matchAndExecuteHandsFreeCommand(transcript);
-        if (options.onTranscriptDetected) {
-          options.onTranscriptDetected(transcript);
-        }
-      }
-    } finally {
-      setIsProcessingSnippet(false);
-    }
-  }, [isProcessingSnippet, options, setLastVoiceCommand]);
-
-  const startAmbient = async () => {
-    try {
-      // 1. Try real-time Continuous Web Speech API first
-      const SpeechRecognition = typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = useStore.getState().language === 'en' ? 'en-US' : 'id-ID';
-
-        recognition.onresult = (event: any) => {
-          let interim = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            const transcript = event.results[i][0]?.transcript || '';
-            if (event.results[i].isFinal) {
-              const final = transcript.trim();
-              if (final.length > 2) {
-                setLastVoiceCommand(final);
-                setInterimCaption('');
-                matchAndExecuteHandsFreeCommand(final);
-                if (options.onTranscriptDetected) {
-                  options.onTranscriptDetected(final);
-                }
-              }
-            } else {
-              interim += transcript;
-            }
-          }
-          if (interim) setInterimCaption(interim);
-        };
-
-        recognition.onerror = (e: any) => {
-          logger.warn('[Ambient Listener] WebSpeech error:', e.error);
-        };
-
-        recognition.onend = () => {
-          if (isAmbientActiveRef.current) {
-            // Keep continuous hands-free active seamlessly
-            try {
-              setTimeout(() => {
-                if (isAmbientActiveRef.current) recognition.start();
-              }, 250);
-            } catch {}
-          }
-        };
-
-        recognition.start();
-        speechRecognitionRef.current = recognition;
-      }
-
-      // 2. Also start background media stream for waveform audio level & Whisper backup
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-      streamRef.current = stream;
-
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.start(1000);
-
-      intervalTimerRef.current = setInterval(() => {
-        // Only run Whisper fallback if SpeechRecognition wasn't present
-        if (!SpeechRecognition) {
-          processAudioBuffer();
-        }
-      }, sliceIntervalMs);
-
-      setHandsFreeListening(true);
-      sounds.play('mic_on');
-      toast.info('🎙️ Mode Bebas Genggam (Hands-Free) Aktif — Ucapkan "Trido, ..."');
-    } catch (err) {
-      logger.error('[Ambient Listener] Failed to start microphone', err);
-      toast.error('Gagal mengakses mikrofon untuk Mode Bebas Genggam.');
-      setHandsFreeListening(false);
-    }
-  };
-
-  const stopAmbient = () => {
-    if (speechRecognitionRef.current) {
-      try {
-        speechRecognitionRef.current.stop();
-      } catch {}
-      speechRecognitionRef.current = null;
-    }
-
-    if (intervalTimerRef.current) {
-      clearInterval(intervalTimerRef.current);
-      intervalTimerRef.current = null;
-    }
-
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
-        mediaRecorderRef.current.stop();
-      } catch {}
-    }
-    mediaRecorderRef.current = null;
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-
-    audioChunksRef.current = [];
-    setHandsFreeListening(false);
-    setInterimCaption('');
-    sounds.play('mic_off');
-    toast.info('Mode Bebas Genggam Dinonaktifkan');
-  };
-
-  const toggleAmbient = () => {
-    if (isHandsFreeListening) {
-      stopAmbient();
-    } else {
-      startAmbient();
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (speechRecognitionRef.current) {
-        try { speechRecognitionRef.current.stop(); } catch {}
-      }
-      if (intervalTimerRef.current) clearInterval(intervalTimerRef.current);
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-    };
+  const stopAmbient = useCallback(() => {
+    active.current = false;
+    if (timer.current) clearTimeout(timer.current);
+    request.current?.abort();
+    if (recorder.current?.state === 'recording') recorder.current.stop();
+    stream.current?.getTracks().forEach(track => track.stop());
+    stream.current = null; recorder.current = null;
+    useStore.getState().setHandsFreeListening(false);
+    setProcessing(false); setCaption('');
   }, []);
 
-  return {
-    isAmbientActive: isHandsFreeListening,
-    isProcessingSnippet,
-    interimCaption,
-    startAmbient,
-    stopAmbient,
-    toggleAmbient
+  const startAmbient = async () => {
+    if (starting.current || active.current) return;
+    useStore.getState().setWarningLanguage(useStore.getState().language);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast.warning('Microphone recording is unavailable. Use text input.'); return;
+    }
+    starting.current = true;
+    try {
+      stream.current = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true } });
+      active.current = true; useStore.getState().setHandsFreeListening(true); sounds.play('mic_on');
+      const nextClip = () => {
+        if (!active.current || !stream.current) return;
+        const chunks: Blob[] = [];
+        const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t));
+        const clip = new MediaRecorder(stream.current, mime ? { mimeType: mime } : undefined); recorder.current = clip;
+        clip.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+        clip.onstop = async () => {
+          if (!active.current) return;
+          setProcessing(true);
+          try {
+            const blob = new Blob(chunks, { type: clip.mimeType || 'audio/webm' });
+            if (blob.size > 64) {
+              const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob);
+              });
+              request.current = new AbortController();
+              const response = await fetch('/api/voice/stt', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ base64Audio: base64, language: useStore.getState().language, engine: 'sarvam' }), signal: request.current.signal });
+              const result = await response.json();
+              if (!response.ok && response.status !== 422) throw new Error(result.error || 'Sarvam speech unavailable.');
+              if (active.current && result.text) {
+                useStore.getState().setWarningLanguage(resolveSpeechLanguage(result).warningLanguage);
+                setCaption(result.text); useStore.getState().setLastVoiceCommand(result.text);
+                const matched = matchAndExecuteHandsFreeCommand(result.text);
+                if (matched.matched) callbacks.current.onTranscriptDetected?.(matched.detail!);
+              }
+            }
+          } catch (error) {
+            if (active.current) { toast.warning(error instanceof Error ? error.message : 'Sarvam speech unavailable.'); stopAmbient(); }
+          } finally {
+            setProcessing(false);
+            if (active.current) nextClip();
+          }
+        };
+        clip.start();
+        timer.current = setTimeout(() => { if (clip.state === 'recording') clip.stop(); }, Math.max(2000, Math.min(25000, callbacks.current.sliceIntervalMs || 5000)));
+      };
+      nextClip();
+      toast.info('Sarvam hands-free listening: say “Vaani suno …”. Audio is sent to Sarvam while enabled.');
+    } catch { stopAmbient(); toast.warning('Allow microphone permission or use text input.'); }
+    finally { starting.current = false; }
   };
+  useEffect(() => stopAmbient, [stopAmbient]);
+  const toggleAmbient = () => { if (active.current) stopAmbient(); else void startAmbient(); };
+  return { isAmbientActive, isProcessingSnippet, interimCaption, startAmbient, stopAmbient, toggleAmbient };
 }
-
 export default useAmbientListener;

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { cn } from "./cn";
 
 export function useMedia(query: string) {
@@ -37,7 +37,7 @@ export function Logo({ className, light }: { className?: string; light?: boolean
         className={cn("display text-[1.55rem]", light ? "text-white" : "text-trido")}
         style={{ letterSpacing: "-0.06em" }}
       >
-        Trido
+        Vaani Board
       </span>
     </span>
   );
@@ -92,7 +92,7 @@ export function Reveal({
   );
 }
 
-/** Highlighter-block text, like the yellow "Trido?" block in the deck */
+/** Highlighter-block text, like the yellow "Vaani Board?" block in the deck */
 export function Mark({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span

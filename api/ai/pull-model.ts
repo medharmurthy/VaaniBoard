@@ -11,6 +11,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({
     success: true,
-    message: 'Pengunduhan model lokal hanya berlaku pada instans lokal Trido.'
+    message: 'Local model downloads only work on a local Vaani Board install.'
   });
 }

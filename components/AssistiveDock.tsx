@@ -39,16 +39,16 @@ export const AssistiveDock: React.FC = () => {
       rotation: 0,
       zIndex: 10
     });
-    toast.success('⏱️ Timer 5 menit aktif di papan!');
+    toast.success('⏱️ Five-minute timer added to the board.');
   };
 
   const handleLaunchRandomWheel = () => {
     const id = `wheel_${Date.now()}`;
     updateDomElement(id, {
       id,
-      html: '<div>Roda</div>',
+      html: '<div>Random picker</div>',
       componentType: 'SPIN_WHEEL',
-      config: { title: 'Giliran Menjawab Siswa' },
+      config: { title: 'Pick a student turn' },
       x: 960,
       y: 540,
       width: 440,
@@ -58,12 +58,12 @@ export const AssistiveDock: React.FC = () => {
       rotation: 0,
       zIndex: 10
     });
-    toast.success('🎲 Roda acak giliran siswa aktif!');
+    toast.success('🎲 Random student picker added.');
   };
 
   const handleResetCamera = () => {
     setViewport(1, [1, 0, 0, 1, 0, 0]);
-    toast.success('🧭 Tampilan kanvas dipusatkan');
+    toast.success('🧭 Canvas view centred.');
   };
 
   return (
@@ -71,11 +71,11 @@ export const AssistiveDock: React.FC = () => {
       {/* Assistive Mode Indicator Badge */}
       <div className="flex items-center gap-2 px-3 py-1 bg-amber-500 text-slate-950 rounded-full font-black text-[11px] shadow-lg shadow-amber-500/20">
         <HeartHandshake size={14} />
-        <span>MODE INKLUSIF (PAK DAMAR)</span>
+        <span>ACCESSIBILITY MODE</span>
         <button
           onClick={() => toggleAssistiveMode(false)}
           className="ml-1 text-[10px] bg-slate-950/20 hover:bg-slate-950/40 text-slate-950 px-1.5 py-0.5 rounded-full cursor-pointer"
-          title="Tutup Mode Inklusif"
+          title="Close accessibility mode"
         >
           ✕
         </button>
@@ -99,7 +99,7 @@ export const AssistiveDock: React.FC = () => {
                 />
               ))}
             </span>
-            <span className="truncate">{interimCaption ? `“${interimCaption}”` : 'Bebas Genggam: "Trido, ..."'}</span>
+            <span className="truncate">{interimCaption ? `“${interimCaption}”` : 'Hands-free voice is listening'}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -114,7 +114,7 @@ export const AssistiveDock: React.FC = () => {
               ? 'bg-[#ffcc00] text-[#0a1a3a] ring-4 ring-[#ffcc00]/30 font-black' 
               : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
           }`}
-          title={isAmbientActive ? 'Mode Bebas Genggam Aktif (Klik untuk Matikan)' : 'Aktifkan Mode Bebas Genggam (Bicara Tanpa Sentuh)'}
+          title={isAmbientActive ? 'Hands-free mode active (click to turn off)' : 'Enable hands-free voice'}
         >
           {isAmbientActive && (
             <motion.span
@@ -124,50 +124,50 @@ export const AssistiveDock: React.FC = () => {
             />
           )}
           <Mic size={22} className={isAmbientActive ? 'text-[#0a1a3a]' : 'text-slate-300'} />
-          <span className="text-[9px] font-black uppercase tracking-tight">{isAmbientActive ? 'Dengar' : 'Suara'}</span>
+          <span className="text-[9px] font-black uppercase tracking-tight">{isAmbientActive ? 'Listening' : 'Voice'}</span>
         </button>
 
         {/* 1. Quick Attendance */}
         <button
           onClick={() => {
             toggleAttendance();
-            toast.info('Daftar presensi dibuka');
+            toast.info('Attendance opened.');
           }}
           className="w-14 h-14 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-90 text-white flex flex-col items-center justify-center gap-0.5 shadow-md transition cursor-pointer"
-          title="Presensi Siswa Cepat"
+          title="Quick attendance"
         >
           <Users size={22} />
-          <span className="text-[9px] font-black uppercase">Absen</span>
+          <span className="text-[9px] font-black uppercase">Attendance</span>
         </button>
 
         {/* 2. Quick Timer 5m */}
         <button
           onClick={handleLaunchQuickTimer}
           className="w-14 h-14 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-90 text-white flex flex-col items-center justify-center gap-0.5 shadow-md transition cursor-pointer"
-          title="Mulai Timer 5 Menit"
+          title="Start Timer 5 Minutes"
         >
           <Clock size={22} />
-          <span className="text-[9px] font-black uppercase">5 Mnt</span>
+          <span className="text-[9px] font-black uppercase">5 min</span>
         </button>
 
         {/* 3. Random Student Wheel */}
         <button
           onClick={handleLaunchRandomWheel}
           className="w-14 h-14 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-90 text-slate-950 flex flex-col items-center justify-center gap-0.5 shadow-md transition cursor-pointer"
-          title="Roda Acak Siswa"
+          title="Random student picker"
         >
           <Dices size={22} />
-          <span className="text-[9px] font-black uppercase">Giliran</span>
+          <span className="text-[9px] font-black uppercase">Pick</span>
         </button>
 
         {/* 4. Reset Viewport Camera */}
         <button
           onClick={handleResetCamera}
           className="w-14 h-14 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-200 flex flex-col items-center justify-center gap-0.5 shadow-md transition cursor-pointer"
-          title="Pusatkan Layar"
+          title="Centre the view"
         >
           <Compass size={22} />
-          <span className="text-[9px] font-black uppercase">Pusat</span>
+          <span className="text-[9px] font-black uppercase">Centre</span>
         </button>
       </div>
     </div>

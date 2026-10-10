@@ -32,7 +32,7 @@ export interface WhisperTranscriptionResult {
  */
 export const isWhisperAvailable = async (): Promise<boolean> => {
   try {
-    const { stdout } = await execFileAsync('python', ['-c', 'import faster_whisper; print("ok")'], { timeout: 8000 });
+    const { stdout } = await execFileAsync(process.env.PYTHON_BIN || 'python3', ['-c', 'import faster_whisper; print("ok")'], { timeout: 8000 });
     return stdout.trim().includes('ok');
   } catch {
     return false;
@@ -76,7 +76,7 @@ export const transcribeAudioWhisper = async (
     }
 
     logger.info(`[Whisper] Executing offline transcription with model: ${modelSize}, language: ${language || 'auto-detect'}...`);
-    const { stdout, stderr } = await execFileAsync('python', args, { timeout: 30000 });
+    const { stdout, stderr } = await execFileAsync(process.env.PYTHON_BIN || 'python3', args, { timeout: 30000 });
 
     if (stderr) {
       logger.debug(`[Whisper] stderr notice: ${stderr.trim()}`);
@@ -97,7 +97,7 @@ export const transcribeAudioWhisper = async (
       return '';
     }
 
-    logger.info(`[Whisper] Transcription complete (${parsed.language}, prob: ${parsed.language_probability}): "${parsed.text}"`);
+    logger.info(`[Whisper] Transcription complete (${parsed.language}).`);
     return parsed.text || '';
   } catch (err: any) {
     logger.error(`[Whisper] Failed to execute offline transcription: ${err.message || err}`);

@@ -60,7 +60,7 @@ export const FloatingToolContainer: React.FC<FloatingToolContainerProps> = ({
                 <button 
                   onClick={onClose}
                   className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-colors cursor-pointer"
-                  title="Tutup"
+                  title="Close"
                 >
                   <X size={15} strokeWidth={2.5} />
                 </button>

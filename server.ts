@@ -19,6 +19,8 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import os from "os";
 import { aiRouter } from "./server/aiRouter";
+import { voiceRouter } from './server/voiceRouter';
+import { classroomRouter } from './server/classroomRouter';
 import { CONFIG } from "./constants";
 import { ClientToServerEvents, RoomState, ServerToClientEvents, SocketData, SocketInterServerEvents } from "./types";
 import { createLogger } from "./utils/logger";
@@ -239,11 +241,15 @@ async function startServer() {
   });
 
   app.use("/api/ai", aiRouter);
+  app.use('/api/voice', voiceRouter);
+  app.use('/api/syllabus', classroomRouter);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      // Share the actual listening server with HMR in middleware mode; otherwise
+      // the browser's Vite socket can target a separate, unopened listener.
+      server: { middlewareMode: true, hmr: { server: httpServer } },
       appType: "spa",
     });
 

@@ -3,6 +3,9 @@ import React, { useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { Point } from '../types';
 import { sounds } from '../utils/sounds';
+import { getLanguageProfile } from '../utils/languages';
+import { getBoardLayoutContext, getCardPanTransform, getCardViewTarget, layoutCardActions, rectsOverlap } from '../utils/boardLayout';
+import { toast } from '../utils/toast';
 
 // CONFIG: High-Speed Agent Action Emulation
 const MIN_REACTION_TIME = 30; 
@@ -10,6 +13,8 @@ const MAX_REACTION_TIME = 80;
 const VERIFICATION_PAUSE = 40;
 
 export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
+  const transactionRef = useRef(false);
+  const cardLayoutRef = useRef<Map<string, any> | null>(null);
   const popAction = useStore(state => state.popAction);
   const actionQueue = useStore(state => state.actionQueue);
   const setCursorPosition = useStore(state => state.setCursorPosition);
@@ -88,6 +93,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
   const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
 
   const execute = async (x: number, y: number, label: string, taskFn: () => void) => {
+    const version = useStore.getState().taskGeneration;
     setCurrentAction(label);
     setSpatialTarget({ x, y });
     setAccuracy(Math.floor(Math.random() * 5) + 95);
@@ -105,7 +111,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
     setClicking(false);
 
     // 4. Act
-    taskFn();
+    if (version === useStore.getState().taskGeneration) taskFn();
 
     // 5. Short verify pause
     await wait(VERIFICATION_PAUSE);
@@ -114,7 +120,8 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
 
   const runRef = useRef<() => Promise<void>>(null as any);
   runRef.current = async () => {
-    if (processingRef.current || actionQueue.length === 0) return;
+    // Zustand subscribers run before React re-renders; do not read a stale render-time queue.
+    if (processingRef.current || useStore.getState().actionQueue.length === 0) return;
     
     processingRef.current = true;
     setActing(true);
@@ -128,6 +135,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
     }
     
     const canvas = canvasRef.current;
+    if (!transactionRef.current) { useStore.getState().beginAiTransaction('Teacher request'); transactionRef.current = true; }
 
     const findTargetObject = (objectId?: string, textLabel?: string) => {
       const objs = canvas.getObjects();
@@ -197,7 +205,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
           const targetY = target ? target.top : (typeof y === 'number' ? y : canvas.height / 2);
 
           await animateCursorTo(targetX, targetY);
-          setCurrentAction(`Klik ${elementText || 'elemen'}...`);
+          setCurrentAction(`Clicking ${elementText || 'object'}…`);
           setClicking(true);
           sounds.play('click');
           await wait(60);
@@ -225,7 +233,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
           if (objs.length > 0) {
             const center = canvas.getCenter();
             await animateCursorTo(center.left, center.top);
-            setCurrentAction('Menggeser semua elemen kanvas...');
+            setCurrentAction('Moving all board objects…');
             setClicking(true);
             await wait(30);
 
@@ -427,7 +435,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
                 fontSize: effectiveFontSize,
                 fill: textColor || (useStore.getState().theme === 'dark' ? '#000000' : '#ffffff'),
                 originX: 'center', originY: 'center',
-                fontFamily: 'system-ui, sans-serif',
+                fontFamily: getLanguageProfile(useStore.getState().boardLanguage).font,
                 textAlign: 'center',
                 splitByGrapheme: false
               });
@@ -462,7 +470,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
             const obj = new window.fabric.Textbox(text, {
               left: x, top: y,
               width: maxTextWidth,
-              fontFamily: 'system-ui, sans-serif',
+              fontFamily: getLanguageProfile(useStore.getState().boardLanguage).font,
               fill: color || defaultColor,
               fontSize: fontSize || 20,
               originX: 'center', originY: 'center',
@@ -578,19 +586,30 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
         }
 
         case 'RENDER_HTML': {
-          const { html, x, y, width, height, componentType, config } = action.payload;
-          await execute(x, y, 'Compiling App...', () => {
-            const id = `web_${Date.now()}`;
+          // Include actions published synchronously by a local command caller.
+          await Promise.resolve();
+          // Plan the whole remaining turn at execution time, including local/reflex
+          // cards and drawings created before this action. Do not move old objects.
+          if (!cardLayoutRef.current) {
+            const planned = layoutCardActions([action, ...useStore.getState().actionQueue], getBoardLayoutContext(canvas, useStore.getState().domElements));
+            cardLayoutRef.current = new Map(planned.filter(item => item.type === 'RENDER_HTML').map(item => [item.id, item.payload]));
+            const overflow = planned.filter(item => item.type === 'RENDER_HTML' && item.payload.boardOverflow).length;
+            if (overflow) toast.warning(`${overflow} new card${overflow === 1 ? ' continues' : 's continue'} below the visible board. Use “View next card” to see ${overflow === 1 ? 'it' : 'them'}; existing work was not moved.`);
+          }
+          const { html, x, y, width, height, scaleX = 1, scaleY = 1, componentType, config } = cardLayoutRef.current.get(action.id) || action.payload;
+          await execute(x, y, 'Adding board card…', () => {
+            const id = `web_${crypto.randomUUID()}`;
             const rect = new window.fabric.Rect({
               left: x, top: y, width: width, height: height,
+              scaleX, scaleY,
               fill: 'rgba(255,255,255,0.01)',
-              stroke: '#00f0ff', strokeWidth: 1,
+              stroke: '#00f0ff', strokeWidth: 0,
               originX: 'center', originY: 'center',
               id: id,
               isDomPlaceholder: true
             });
             canvas.add(rect);
-            updateDomElement(id, { id, html, x, y, width, height, scaleX: 1, scaleY: 1, rotation: 0, zIndex: 10, componentType, config });
+            updateDomElement(id, { id, html, x, y, width, height, scaleX, scaleY, rotation: 0, zIndex: 10, componentType, config });
             canvas.setActiveObject(rect);
             canvas.requestRenderAll();
           });
@@ -683,7 +702,7 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
             const posX = target ? target.left : doms[targetDomId].x;
             const posY = target ? target.top : doms[targetDomId].y;
 
-            await execute(posX, posY, 'Mengedit komponen...', () => {
+            await execute(posX, posY, 'Editing board card…', () => {
               storeState.updateDomElement(targetDomId, { config: mergedConfig });
             });
           }
@@ -981,31 +1000,22 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
       console.error("Action failed:", err);
     }
 
-    processingRef.current = false;
-    setActing(false);
-    setCurrentAction(null);
-
     // Play success sound when queue is finished
     if (useStore.getState().actionQueue.length === 0) {
       sounds.play('success');
       
-      // Remove tiny circle objects that have no text and no connections (Fix 4)
-      const toRemove: any[] = [];
-      canvas.getObjects().forEach((obj: any) => {
-        if (obj.type === 'circle') {
-          const circle = obj;
-          if (
-            (circle.radius || 0) < 8 &&
-            !circle.id?.startsWith('node_') &&
-            !circle.id?.startsWith('agent_')
-          ) {
-            toRemove.push(obj);
-          }
-        }
-      });
-      toRemove.forEach(obj => canvas.remove(obj));
+      // Existing teacher marks, including small circles, are not layout debris.
       canvas.requestRenderAll();
+      if (transactionRef.current) { useStore.getState().commitAiTransaction(); transactionRef.current = false; }
+      cardLayoutRef.current = null;
     }
+    // Keep the lock until history is committed. Zustand subscribers run synchronously:
+    // releasing it before setActing(false) lets the next action pop the queue and makes
+    // this action incorrectly commit an intermediate snapshot as the end of the turn.
+    setCurrentAction(null);
+    setActing(false);
+    processingRef.current = false;
+    if (useStore.getState().actionQueue.length > 0) void runRef.current();
   };
 
   // Event-driven processing: subscribe to actionQueue changes instead of polling.
@@ -1026,4 +1036,27 @@ export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
 
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const navigate = (event: Event) => {
+      const canvas = canvasRef.current;
+      const element = useStore.getState().domElements[(event as CustomEvent).detail?.id];
+      if (!canvas || !element) return;
+      const context = getBoardLayoutContext(canvas, {});
+      const width = element.width * Math.abs(element.scaleX ?? 1) * Math.hypot(context.transform[0], context.transform[1]);
+      const height = element.height * Math.abs(element.scaleY ?? 1) * Math.hypot(context.transform[2], context.transform[3]);
+      const target = getCardViewTarget(width, height, context);
+      const bounds = { x: target.x - width / 2, y: target.y - height / 2, width, height };
+      if (bounds.x < 0 || bounds.y < 0 || bounds.x + width > context.width || bounds.y + height > context.height || context.controls?.some(control => rectsOverlap(bounds, control, 8))) {
+        window.dispatchEvent(new CustomEvent('vaani:focus-board-card', { detail: { id: element.id } }));
+        return;
+      }
+      const transform = getCardPanTransform({ x: element.x, y: element.y }, context.transform, target);
+      canvas.setViewportTransform(transform);
+      useStore.getState().setViewport(canvas.getZoom?.() || Math.hypot(transform[0], transform[1]), transform);
+      canvas.requestRenderAll();
+    };
+    window.addEventListener('vaani:view-board-card', navigate);
+    return () => window.removeEventListener('vaani:view-board-card', navigate);
+  }, [canvasRef]);
 };

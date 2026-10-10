@@ -97,7 +97,7 @@ export const TimerTool: React.FC<TimerToolProps> = ({ config }) => {
           now.getSeconds() < 2
         ) {
           playChime();
-          toast.warning(t('timerAlarmRinging', '⏰ Alarm berbunyi! Waktunya telah tiba!'));
+          toast.warning(t('timerAlarmRinging', '⏰ The alarm is ringing. It is time!'));
           setIsAlarmActive(false);
         }
       }
@@ -113,7 +113,7 @@ export const TimerTool: React.FC<TimerToolProps> = ({ config }) => {
           if (prev <= 1) {
             setIsActive(false);
             playChime();
-            toast.success('Waktu habis! Sesi selesai.');
+            toast.success('Time is up! The session is complete.');
             return 0;
           }
           return prev - 1;
@@ -185,10 +185,10 @@ export const TimerTool: React.FC<TimerToolProps> = ({ config }) => {
             {mode === 'CLOCK' && (
               <div className="text-center">
                 <div className="text-5xl font-black text-slate-800 tracking-tighter font-mono">
-                  {currentTime.toLocaleTimeString(language === 'en' ? 'en-US' : 'id-ID', { hour12: false })}
+                  {currentTime.toLocaleTimeString(language === 'en' ? 'en-US' : 'en-IN', { hour12: false })}
                 </div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">
-                  {currentTime.toLocaleDateString(language === 'en' ? 'en-US' : 'id-ID', { weekday: 'long', day: 'numeric', month: 'long' })}
+                  {currentTime.toLocaleDateString(language === 'en' ? 'en-US' : 'en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </div>
               </div>
             )}
@@ -244,7 +244,7 @@ export const TimerTool: React.FC<TimerToolProps> = ({ config }) => {
                         ? 'bg-indigo-50 border-indigo-200 text-indigo-600'
                         : 'bg-white border-slate-200 text-slate-500 hover:text-slate-700'
                     }`}
-                    title="Beralih Mode Visual Lingkaran"
+                    title="Switch visual timer mode"
                   >
                     <Eye size={12} /> {isVisualPie ? 'Mode Visual' : 'Mode Angka'}
                   </button>
@@ -326,7 +326,7 @@ export const TimerTool: React.FC<TimerToolProps> = ({ config }) => {
                     isAlarmActive ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'
                   }`}
                 >
-                  {isAlarmActive ? t('cancelAlarm', 'BATALKAN ALARM') : t('setAlarm', 'SETEL ALARM')}
+                  {isAlarmActive ? t('cancelAlarm', 'CANCEL ALARM') : t('setAlarm', 'SET ALARM')}
                 </button>
               </div>
             )}
