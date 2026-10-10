@@ -1,0 +1,122 @@
+
+// utils/sounds.ts
+class SoundManager {
+  private context: AudioContext | null = null;
+  private enabled: boolean = true;
+  private activeOscillators: Set<OscillatorNode> = new Set();
+
+  private initContext() {
+    if (typeof window === 'undefined') return;
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!this.context) {
+      try {
+        this.context = new AudioCtx();
+      } catch {
+        return;
+      }
+    }
+    if (this.context && this.context.state === 'suspended') {
+      try {
+        this.context.resume();
+      } catch {}
+    }
+  }
+
+  play(name: string) {
+    if (!this.enabled) return;
+    this.initContext();
+    if (!this.context) return;
+    const ctx = this.context;
+
+    switch (name) {
+      case 'mic_on':
+        this.playTone(440, 0.1, 'sine', 0.1);
+        this.playTone(880, 0.1, 'sine', 0.1, 0.1);
+        break;
+      case 'mic_off':
+        this.playTone(880, 0.1, 'sine', 0.1);
+        this.playTone(440, 0.1, 'sine', 0.1, 0.1);
+        break;
+      case 'success':
+        this.playTone(523.25, 0.1, 'sine', 0.1); // C5
+        this.playTone(659.25, 0.1, 'sine', 0.1, 0.1); // E5
+        this.playTone(783.99, 0.2, 'sine', 0.1, 0.2); // G5
+        break;
+      case 'pop':
+        this.playTone(600, 0.05, 'sine', 0.1);
+        break;
+      case 'thinking':
+        this.startThinking();
+        break;
+    }
+  }
+
+  private playTone(freq: number, duration: number, type: OscillatorType, volume: number, delay: number = 0) {
+    const ctx = this.context!;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+    
+    gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+    gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + delay + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + delay + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime + delay);
+    osc.stop(ctx.currentTime + delay + duration);
+  }
+
+  private thinkingOsc: OscillatorNode | null = null;
+  private thinkingGain: GainNode | null = null;
+
+  private startThinking() {
+    if (this.thinkingOsc) return;
+    const ctx = this.context!;
+    
+    this.thinkingOsc = ctx.createOscillator();
+    this.thinkingGain = ctx.createGain();
+
+    this.thinkingOsc.type = 'sine';
+    this.thinkingOsc.frequency.setValueAtTime(110, ctx.currentTime); // Low hum
+    
+    // Add subtle frequency modulation
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 2;
+    lfoGain.gain.value = 5;
+    lfo.connect(lfoGain);
+    lfoGain.connect(this.thinkingOsc.frequency);
+    lfo.start();
+
+    this.thinkingGain.gain.setValueAtTime(0, ctx.currentTime);
+    this.thinkingGain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.5);
+
+    this.thinkingOsc.connect(this.thinkingGain);
+    this.thinkingGain.connect(ctx.destination);
+
+    this.thinkingOsc.start();
+  }
+
+  stop(name: string) {
+    if (name === 'thinking' && this.thinkingOsc) {
+      const ctx = this.context!;
+      this.thinkingGain?.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.5);
+      setTimeout(() => {
+        this.thinkingOsc?.stop();
+        this.thinkingOsc = null;
+        this.thinkingGain = null;
+      }, 600);
+    }
+  }
+
+  toggle(enabled: boolean) {
+    this.enabled = enabled;
+  }
+}
+
+export const sounds = new SoundManager();

@@ -1,0 +1,57 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+dist-server
+dist-electron
+dist-release
+release-zip
+
+
+# Environment — NEVER commit real keys
+.env
+.env.local
+.env.*.local
+*.service-account.json
+.service-account.json
+.vercel
+
+# Runtime server state
+rooms_persistence.json
+data/
+*.telemetry.json
+trido_telemetry.json
+
+# Local machine artifacts
+lint_output.txt
+*.local
+
+# IDE / platform metadata
+metadata.json
+.gemini/
+
+# Editor directories
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Empty directories
+lib/
+.vercel

@@ -1,0 +1,1029 @@
+
+import React, { useEffect, useRef } from 'react';
+import { useStore } from '../store';
+import { Point } from '../types';
+import { sounds } from '../utils/sounds';
+
+// CONFIG: High-Speed Agent Action Emulation
+const MIN_REACTION_TIME = 30; 
+const MAX_REACTION_TIME = 80;
+const VERIFICATION_PAUSE = 40;
+
+export const useAgentProcessor = (canvasRef: React.MutableRefObject<any>) => {
+  const popAction = useStore(state => state.popAction);
+  const actionQueue = useStore(state => state.actionQueue);
+  const setCursorPosition = useStore(state => state.setCursorPosition);
+  const setActing = useStore(state => state.setActing);
+  const setClicking = useStore(state => state.setClicking);
+  const setCurrentAction = useStore(state => state.setCurrentAction);
+  const setSpatialTarget = useStore(state => state.setSpatialTarget);
+  const setAccuracy = useStore(state => state.setAccuracy);
+  const updateDomElement = useStore(state => state.updateDomElement);
+  const removeDomElement = useStore(state => state.removeDomElement);
+
+  const processingRef = useRef(false);
+
+  // --- PHYSICS ENGINE: Cubic Bezier ---
+  const getBezierPoint = (t: number, p0: Point, p1: Point, p2: Point, p3: Point): Point => {
+    const mt = 1 - t;
+    const mt2 = mt * mt;
+    const mt3 = mt2 * mt;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return {
+      x: mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x,
+      y: mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y
+    };
+  };
+
+  const animateCursorTo = (targetX: number, targetY: number): Promise<void> => {
+    return new Promise((resolve) => {
+      const startPos = useStore.getState().cursorPosition;
+      
+      // 1. Calculate Control Points for a natural "Hand Arc"
+      const dist = Math.hypot(targetX - startPos.x, targetY - startPos.y);
+      const arcScale = Math.min(dist * 0.3, 200); 
+      // Flip arc direction randomly
+      const side = Math.random() > 0.5 ? 1 : -1;
+      
+      const cp1 = {
+        x: startPos.x + (targetX - startPos.x) * 0.25 + (Math.random() * arcScale * side),
+        y: startPos.y + (targetY - startPos.y) * 0.25 + (Math.random() * arcScale * side)
+      };
+      const cp2 = {
+        x: targetX - (targetX - startPos.x) * 0.25 + (Math.random() * (arcScale * 0.5) * side),
+        y: targetY - (targetY - startPos.y) * 0.25 + (Math.random() * (arcScale * 0.5) * side)
+      };
+
+      // 2. High-Speed Variable Motion
+      const baseTime = 70;
+      const travelTime = dist * 0.08;
+      const duration = Math.min(220, Math.max(60, baseTime + travelTime));
+      
+      const startTime = performance.now();
+
+      const tick = (now: number) => {
+        // Abort check
+        if (useStore.getState().actionQueue.length === 0 && !processingRef.current) return resolve();
+
+        const elapsed = now - startTime;
+        let p = Math.min(elapsed / duration, 1);
+        
+        // Easing: Ease Out Quart
+        const ease = 1 - Math.pow(1 - p, 4);
+
+        const next = getBezierPoint(ease, startPos, cp1, cp2, { x: targetX, y: targetY });
+        setCursorPosition(next);
+
+        if (p < 1) requestAnimationFrame(tick);
+        else {
+          setCursorPosition({ x: targetX, y: targetY }); // Snap
+          resolve();
+        }
+      };
+      requestAnimationFrame(tick);
+    });
+  };
+
+  const wait = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const execute = async (x: number, y: number, label: string, taskFn: () => void) => {
+    setCurrentAction(label);
+    setSpatialTarget({ x, y });
+    setAccuracy(Math.floor(Math.random() * 5) + 95);
+
+    // 1. Move
+    await animateCursorTo(x, y);
+    
+    // 2. Snappy cognitive pause
+    const thinkingTime = Math.random() * (MAX_REACTION_TIME - MIN_REACTION_TIME) + MIN_REACTION_TIME;
+    await wait(thinkingTime);
+
+    // 3. Click
+    setClicking(true);
+    await wait(50);
+    setClicking(false);
+
+    // 4. Act
+    taskFn();
+
+    // 5. Short verify pause
+    await wait(VERIFICATION_PAUSE);
+    setSpatialTarget(null);
+  };
+
+  const runRef = useRef<() => Promise<void>>(null as any);
+  runRef.current = async () => {
+    if (processingRef.current || actionQueue.length === 0) return;
+    
+    processingRef.current = true;
+    setActing(true);
+    const action = popAction();
+    
+    if (!action || !canvasRef.current) {
+      processingRef.current = false;
+      setActing(false);
+      setCurrentAction(null);
+      return;
+    }
+    
+    const canvas = canvasRef.current;
+
+    const findTargetObject = (objectId?: string, textLabel?: string) => {
+      const objs = canvas.getObjects();
+      if (objectId) {
+        const found = objs.find((o: any) => o.id === objectId);
+        if (found) return found;
+      }
+      if (!textLabel) return null;
+      const search = textLabel.toLowerCase().trim();
+
+      const getNodeText = (o: any): string | null => {
+        if (o.type === 'group') {
+          for (const inner of o.getObjects()) {
+            if ((inner.type === 'i-text' || inner.type === 'text' || inner.type === 'textbox') && inner.text)
+              return inner.text.toLowerCase().trim();
+          }
+        } else if ((o.type === 'i-text' || o.type === 'text' || o.type === 'textbox') && o.text) {
+          return o.text.toLowerCase().trim();
+        }
+        return null;
+      };
+
+      for (const o of objs) {
+        const t = getNodeText(o);
+        if (t === search) return o;
+      }
+      const clean = (s: string) =>
+        s.toLowerCase().replace(/^\d+[\.\)]\s*/, '').replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+      const cleanSearch = clean(search);
+      for (const o of objs) {
+        const t = getNodeText(o);
+        if (t && clean(t) === cleanSearch) return o;
+      }
+      for (const o of objs) {
+        const t = getNodeText(o);
+        if (t && (t.includes(search) || search.includes(t))) return o;
+      }
+      for (const o of objs) {
+        const t = getNodeText(o);
+        if (t) {
+          const ct = clean(t);
+          if ((ct.length > 2 && cleanSearch.includes(ct)) || (cleanSearch.length > 2 && ct.includes(cleanSearch))) return o;
+        }
+      }
+      const domElements = useStore.getState().domElements;
+      for (const [domId, dom] of Object.entries(domElements)) {
+        const title = (dom as any)?.config?.title || (dom as any)?.title || '';
+        if (title.toLowerCase().includes(search)) {
+          const domObj = objs.find((o: any) => o.id === domId);
+          if (domObj) return domObj;
+        }
+      }
+      return null;
+    };
+
+    try {
+      switch (action.type) {
+        case 'MOVE_CURSOR': {
+          await execute(action.payload.x, action.payload.y, 'Observing...', () => {});
+          break;
+        }
+
+        case 'CLICK_ELEMENT': {
+          const { objectId, elementText, x, y } = action.payload;
+          const target = findTargetObject(objectId, elementText);
+          const targetX = target ? target.left : (typeof x === 'number' ? x : canvas.width / 2);
+          const targetY = target ? target.top : (typeof y === 'number' ? y : canvas.height / 2);
+
+          await animateCursorTo(targetX, targetY);
+          setCurrentAction(`Klik ${elementText || 'elemen'}...`);
+          setClicking(true);
+          sounds.play('click');
+          await wait(60);
+
+          if (target) {
+            canvas.setActiveObject(target);
+            canvas.requestRenderAll();
+          }
+
+          try {
+            const el = document.elementFromPoint(targetX, targetY);
+            if (el && (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.getAttribute('role') === 'button' || el.closest('button'))) {
+              (el.closest('button') || el as HTMLElement).click();
+            }
+          } catch {}
+
+          setClicking(false);
+          await wait(30);
+          break;
+        }
+
+        case 'DRAG_ALL_ELEMENTS': {
+          const { deltaX, deltaY } = action.payload;
+          const objs = canvas.getObjects();
+          if (objs.length > 0) {
+            const center = canvas.getCenter();
+            await animateCursorTo(center.left, center.top);
+            setCurrentAction('Menggeser semua elemen kanvas...');
+            setClicking(true);
+            await wait(30);
+
+            const steps = 14;
+            let lastProgress = 0;
+
+            for (let i = 1; i <= steps; i++) {
+              const t = i / steps;
+              const ease = 1 - Math.pow(1 - t, 3);
+              const stepDelta = ease - lastProgress;
+              lastProgress = ease;
+
+              const dx = deltaX * stepDelta;
+              const dy = deltaY * stepDelta;
+
+              objs.forEach((o: any) => {
+                o.set({ left: o.left + dx, top: o.top + dy });
+                o.setCoords();
+                if (o.isDomPlaceholder) {
+                  updateDomElement(o.id, { x: o.left, y: o.top });
+                }
+              });
+
+              setCursorPosition({
+                x: center.left + deltaX * ease,
+                y: center.top + deltaY * ease
+              });
+              canvas.requestRenderAll();
+              await wait(10);
+            }
+
+            setClicking(false);
+            await wait(30);
+          }
+          break;
+        }
+
+        case 'PAN_CAMERA': {
+           const { objectId, direction } = action.payload;
+           
+           let targetX = 0;
+           let targetY = 0;
+           let shouldPan = false;
+
+           // Find object location if specified
+           if (objectId) {
+             const target = canvas.getObjects().find((o: any) => o.id === objectId);
+             if (target) {
+               targetX = target.left;
+               targetY = target.top;
+               shouldPan = true;
+             }
+           } else if (direction) {
+              // Pan relative to current view
+              const vpt = canvas.viewportTransform;
+              const invVpt = window.fabric.util.invertTransform(vpt);
+              const center = window.fabric.util.transformPoint({ x: canvas.width / 2, y: canvas.height / 2 }, invVpt);
+              const panAmount = Math.max(canvas.width, canvas.height) * 0.5;
+
+              targetX = center.x;
+              targetY = center.y;
+              if (direction === 'UP') targetY -= panAmount;
+              if (direction === 'DOWN') targetY += panAmount;
+              if (direction === 'LEFT') targetX -= panAmount;
+              if (direction === 'RIGHT') targetX += panAmount;
+              shouldPan = true;
+           }
+
+           if (shouldPan) {
+             await execute(canvas.width / 2, canvas.height / 2, 'Panning...', async () => {
+               const currentVpt = [...canvas.viewportTransform];
+               const zoom = canvas.getZoom();
+               // We want the target location to be at the center of the canvas
+               const destX = (canvas.width / 2) - (targetX * zoom);
+               const destY = (canvas.height / 2) - (targetY * zoom);
+
+               const startX = currentVpt[4];
+               const startY = currentVpt[5];
+
+               const steps = 30;
+               for (let i = 1; i <= steps; i++) {
+                 const t = i / steps;
+                 // EaseInOutQuad
+                 const ease = t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                 const curX = startX + (destX - startX) * ease;
+                 const curY = startY + (destY - startY) * ease;
+                 
+                 currentVpt[4] = curX;
+                 currentVpt[5] = curY;
+                 
+                 canvas.setViewportTransform([...currentVpt]);
+                 useStore.getState().setViewport(zoom, [...currentVpt]);
+                 
+                 await wait(16); // ~60fps
+               }
+             });
+           }
+           break;
+        }
+
+        case 'CREATE_SHAPE': {
+          const { shapeType, x, y, width, height, fill, stroke, strokeWidth, text, textColor, fontSize, nodeId } = action.payload;
+          await execute(x, y, `Creating ${shapeType}...`, () => {
+            let obj;
+            const defaultColor = useStore.getState().theme === 'dark' ? '#ffffff' : '#000000';
+            const shapeId = nodeId || action.payload.id || `shape_${Date.now()}`;
+            const common = {
+              left: x, top: y, width, height,
+              fill: fill || defaultColor,
+              stroke: stroke || 'transparent',
+              strokeWidth: strokeWidth || 0,
+              originX: 'center', originY: 'center',
+              shadow: new window.fabric.Shadow({
+                color: 'rgba(0,0,0,0.1)',
+                blur: 15,
+                offsetX: 0,
+                offsetY: 6
+              }),
+              id: shapeId
+            };
+
+            if (shapeType === 'RECTANGLE') {
+              obj = new window.fabric.Rect({ ...common, rx: 12, ry: 12 });
+            } else if (shapeType === 'CIRCLE') {
+              obj = new window.fabric.Circle({ ...common, radius: (width || height || 100) / 2 });
+            } else if (shapeType === 'TRIANGLE') {
+              obj = new window.fabric.Triangle(common);
+            } else if (shapeType === 'STAR') {
+              const numPoints = 5;
+              const rad = (width || 120) / 2;
+              const innerRadius = rad * 0.45;
+              const points = [];
+              for (let i = 0; i < numPoints * 2; i++) {
+                const r = i % 2 === 0 ? rad : innerRadius;
+                const angle = (Math.PI * i) / numPoints - Math.PI / 2;
+                points.push({ x: r * Math.cos(angle), y: r * Math.sin(angle) });
+              }
+              obj = new window.fabric.Polygon(points, common);
+            } else if (shapeType === 'DIAMOND') {
+              const hw = (width || 120) / 2;
+              const hh = (height || 120) / 2;
+              obj = new window.fabric.Polygon([
+                { x: 0, y: -hh }, { x: hw, y: 0 }, { x: 0, y: hh }, { x: -hw, y: 0 }
+              ], common);
+            } else if (shapeType === 'HEART') {
+              obj = new window.fabric.Path('M 0 25 C -5 20 -50 -5 -50 -25 C -50 -45 -25 -55 0 -30 C 25 -55 50 -45 50 -25 C 50 -5 5 20 0 25 Z', {
+                ...common,
+                scaleX: (width || 100) / 100,
+                scaleY: (height || 100) / 100
+              });
+            } else if (shapeType === 'PENTAGON') {
+              const pPoints = [];
+              const pRad = (width || 110) / 2;
+              for (let i = 0; i < 5; i++) {
+                const angle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
+                pPoints.push({ x: pRad * Math.cos(angle), y: pRad * Math.sin(angle) });
+              }
+              obj = new window.fabric.Polygon(pPoints, common);
+            } else if (shapeType === 'POLYGON') {
+              const hPoints = [];
+              const hRad = (width || 110) / 2;
+              for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI * 2 * i) / 6;
+                hPoints.push({ x: hRad * Math.cos(angle), y: hRad * Math.sin(angle) });
+              }
+              obj = new window.fabric.Polygon(hPoints, common);
+            } else if (shapeType === 'SPEECH_BUBBLE') {
+              obj = new window.fabric.Path('M -70 -40 Q -70 -70 -40 -70 L 40 -70 Q 70 -70 70 -40 L 70 15 Q 70 45 40 45 L -10 45 L -30 70 L -20 45 L -40 45 Q -70 45 -70 15 Z', {
+                ...common,
+                scaleX: (width || 140) / 140,
+                scaleY: (height || 110) / 110
+              });
+            } else if (shapeType === 'ARROW') {
+              const arrowPath = `M ${-width/2} 0 L ${width/2} 0 M ${width/2 - 16} -10 L ${width/2} 0 L ${width/2 - 16} 10`;
+              obj = new window.fabric.Path(arrowPath, {
+                ...common,
+                fill: 'transparent',
+                stroke: fill || defaultColor,
+                strokeWidth: strokeWidth || 3,
+                strokeLineCap: 'round',
+                strokeLineJoin: 'round'
+              });
+            } else if (shapeType === 'LINE') {
+              obj = new window.fabric.Line([-width/2, 0, width/2, 0], {
+                ...common,
+                stroke: fill || defaultColor,
+                strokeWidth: strokeWidth || 3,
+                strokeLineCap: 'round'
+              });
+            }
+
+            if (obj && text) {
+              const effectiveFontSize = fontSize || 18;
+              const textWidth = Math.max(50, width - 20); // 10px padding on each side
+              const textObj = new window.fabric.Textbox(text, {
+                left: x,
+                top: y,
+                width: textWidth,
+                fontSize: effectiveFontSize,
+                fill: textColor || (useStore.getState().theme === 'dark' ? '#000000' : '#ffffff'),
+                originX: 'center', originY: 'center',
+                fontFamily: 'system-ui, sans-serif',
+                textAlign: 'center',
+                splitByGrapheme: false
+              });
+
+              if (shapeType === 'RECTANGLE') {
+                const requiredHeight = Math.max(height, textObj.height + 30);
+                const requiredWidth = Math.max(width, textWidth + 20);
+                obj.set({ width: requiredWidth, height: requiredHeight });
+              }
+
+              // Group them so they move together
+              obj = new window.fabric.Group([obj, textObj], {
+                left: x, top: y,
+                originX: 'center', originY: 'center',
+                id: shapeId
+              });
+            }
+
+            if (obj) {
+              canvas.add(obj);
+              canvas.requestRenderAll();
+            }
+          });
+          break;
+        }
+
+        case 'WRITE_TEXT': {
+          const { text, x, y, color, fontSize } = action.payload;
+          await execute(x, y, 'Writing...', () => {
+            const defaultColor = useStore.getState().theme === 'dark' ? '#ffffff' : '#000000';
+            const maxTextWidth = Math.min(400, (canvas.width || 800) - 40);
+            const obj = new window.fabric.Textbox(text, {
+              left: x, top: y,
+              width: maxTextWidth,
+              fontFamily: 'system-ui, sans-serif',
+              fill: color || defaultColor,
+              fontSize: fontSize || 20,
+              originX: 'center', originY: 'center',
+              textAlign: 'center',
+              id: `text_${Date.now()}`
+            });
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+            canvas.requestRenderAll();
+          });
+          break;
+        }
+
+        case 'DRAW_PATH': {
+          const { pathSvg, x, y, strokeColor, strokeWidth, fromNodeText, toNodeText, lineStyle, fromX, fromY, toX, toY, direction, isArrow = true } = action.payload;
+
+          let sx: number | undefined = typeof fromX === 'number' ? fromX : undefined;
+          let sy: number | undefined = typeof fromY === 'number' ? fromY : undefined;
+          let tx: number | undefined = typeof toX === 'number' ? toX : undefined;
+          let ty: number | undefined = typeof toY === 'number' ? toY : undefined;
+
+          if (fromNodeText) {
+            const source = findTargetObject(undefined, fromNodeText);
+            if (source) {
+              sx = source.left;
+              sy = source.top;
+            }
+          }
+
+          if (toNodeText) {
+            const target = findTargetObject(undefined, toNodeText);
+            if (target) {
+              tx = target.left;
+              ty = target.top;
+            }
+          }
+
+          // If starting point found, but target point not specified, calculate from direction
+          if (typeof sx === 'number' && typeof sy === 'number' && (typeof tx !== 'number' || typeof ty !== 'number')) {
+            const dir = (direction || 'RIGHT').toUpperCase();
+            const dist = 180;
+            if (dir.includes('RIGHT')) tx = sx + dist;
+            else if (dir.includes('LEFT')) tx = sx - dist;
+            else tx = sx;
+
+            if (dir.includes('DOWN')) ty = sy + dist;
+            else if (dir.includes('UP')) ty = sy - dist;
+            else ty = sy;
+          }
+
+          // If no start point specified at all, fallback to canvas center
+          if (typeof sx !== 'number' || typeof sy !== 'number') {
+            const center = canvas.getCenter();
+            sx = center.left - 100;
+            sy = center.top;
+            tx = center.left + 100;
+            ty = center.top;
+          }
+
+          if (typeof sx === 'number' && typeof sy === 'number' && typeof tx === 'number' && typeof ty === 'number') {
+            await execute((sx + tx) / 2, (sy + ty) / 2, isArrow ? 'Drawing Arrow...' : 'Drawing Line...', () => {
+              const effectiveColor = strokeColor || '#3B82F6';
+              const effectiveWidth = strokeWidth || 3;
+              const hasArrow = isArrow !== false && (!lineStyle || lineStyle === 'ARROW_STRAIGHT' || lineStyle === 'ARROW_CURVED');
+              let pathStr = lineStyle === 'ARROW_CURVED'
+                ? `M ${sx} ${sy} Q ${sx + (tx - sx) / 2} ${sy - 80} ${tx} ${ty}`
+                : `M ${sx} ${sy} L ${tx} ${ty}`;
+
+              const path = new window.fabric.Path(pathStr, {
+                fill: 'transparent',
+                stroke: effectiveColor,
+                strokeWidth: effectiveWidth,
+                strokeLineCap: 'round',
+                id: `path_${Date.now()}`
+              });
+              canvas.add(path);
+              canvas.sendToBack(path);
+
+              if (hasArrow) {
+                const angle = Math.atan2(ty - sy, tx - sx);
+                const aLen = 14, aWidth = 8;
+                const ax1 = tx - aLen * Math.cos(angle - 0.45);
+                const ay1 = ty - aLen * Math.sin(angle - 0.45);
+                const ax2 = tx - aLen * Math.cos(angle + 0.45);
+                const ay2 = ty - aLen * Math.sin(angle + 0.45);
+                const head = new window.fabric.Polygon(
+                  [{ x: tx, y: ty }, { x: ax1, y: ay1 }, { x: ax2, y: ay2 }],
+                  { fill: effectiveColor, stroke: 'transparent', strokeWidth: 0, id: `arrow_${Date.now()}`, selectable: false, evented: false }
+                );
+                canvas.add(head);
+                canvas.sendToBack(head);
+              }
+              canvas.requestRenderAll();
+            });
+          } else if (pathSvg) {
+            await execute(x || canvas.width / 2, y || canvas.height / 2, 'Sketching...', () => {
+              const path = new window.fabric.Path(pathSvg);
+              path.set({
+                left: x || canvas.width / 2,
+                top: y || canvas.height / 2,
+                originX: 'center',
+                originY: 'center',
+                fill: 'transparent',
+                stroke: strokeColor || '#ff003c',
+                strokeWidth: strokeWidth || 2,
+                id: `path_${Date.now()}`
+              });
+              canvas.add(path);
+              canvas.requestRenderAll();
+            });
+          }
+          break;
+        }
+
+        case 'RENDER_HTML': {
+          const { html, x, y, width, height, componentType, config } = action.payload;
+          await execute(x, y, 'Compiling App...', () => {
+            const id = `web_${Date.now()}`;
+            const rect = new window.fabric.Rect({
+              left: x, top: y, width: width, height: height,
+              fill: 'rgba(255,255,255,0.01)',
+              stroke: '#00f0ff', strokeWidth: 1,
+              originX: 'center', originY: 'center',
+              id: id,
+              isDomPlaceholder: true
+            });
+            canvas.add(rect);
+            updateDomElement(id, { id, html, x, y, width, height, scaleX: 1, scaleY: 1, rotation: 0, zIndex: 10, componentType, config });
+            canvas.setActiveObject(rect);
+            canvas.requestRenderAll();
+          });
+          break;
+        }
+
+        case 'CREATE_SVG': {
+          const { svgXml, x, y } = action.payload;
+          await execute(x, y, 'Drawing Vector...', () => {
+            window.fabric.loadSVGFromString(svgXml, (objs: any[], opts: any) => {
+              if(!objs?.length) return;
+              const grp = window.fabric.util.groupSVGElements(objs, opts);
+              grp.set({ left: x, top: y, originX: 'center', originY: 'center', id: `svg_${Date.now()}` });
+              canvas.add(grp);
+              canvas.requestRenderAll();
+            });
+          });
+          break;
+        }
+
+        case 'CREATE_IMAGE': {
+          const { base64, x, y, width } = action.payload;
+          await execute(x, y, 'Placing Asset...', () => {
+            window.fabric.Image.fromURL(base64, (img: any) => {
+              if (width) img.scaleToWidth(width);
+              img.set({ left: x, top: y, originX: 'center', originY: 'center', id: `img_${Date.now()}` });
+              canvas.add(img);
+              canvas.requestRenderAll();
+            });
+          });
+          break;
+        }
+
+        case 'EDIT_HTML': {
+          const { objectId, componentTitle, config, action: editAction } = action.payload;
+          const storeState = useStore.getState();
+          const doms = storeState.domElements;
+
+          let targetDomId = objectId;
+          if (!targetDomId || !doms[targetDomId]) {
+            const search = (componentTitle || '').toLowerCase().trim();
+            const entry = Object.entries(doms).find(([id, el]) => {
+              if (id === objectId) return true;
+              const title = (el.config?.title || '').toLowerCase();
+              const cType = (el.componentType || '').toLowerCase();
+              if (!search) return false;
+              if (title.includes(search) || search.includes(title)) return true;
+              if (cType.includes(search)) return true;
+
+              // Smart educational aliases
+              const isDiagramSearch = search.includes('mindmap') || search.includes('peta') || search.includes('konsep') || search.includes('diagram') || search.includes('alur') || search.includes('mermaid');
+              if (isDiagramSearch && (cType.includes('mermaid') || cType.includes('markmap'))) return true;
+
+              const isDocSearch = search.includes('catatan') || search.includes('materi') || search.includes('dokumen') || search.includes('note');
+              if (isDocSearch && (cType.includes('document') || cType.includes('markdown'))) return true;
+
+              const isAttendanceSearch = search.includes('absensi') || search.includes('presensi') || search.includes('kehadiran') || search.includes('siswa');
+              if (isAttendanceSearch && (cType.includes('attendance') || cType.includes('presensi'))) return true;
+
+              return false;
+            });
+
+            if (entry) {
+              targetDomId = entry[0];
+            } else if (search.includes('mindmap') || search.includes('diagram') || search.includes('peta') || search.includes('alur')) {
+              // Fallback to the existing diagram if only one exists
+              const diagrams = Object.entries(doms).filter(([_, el]) => {
+                const ct = (el.componentType || '').toLowerCase();
+                return ct.includes('mermaid') || ct.includes('markmap');
+              });
+              if (diagrams.length > 0) targetDomId = diagrams[diagrams.length - 1][0];
+            }
+          }
+
+          if (targetDomId && doms[targetDomId]) {
+            const existingConfig = doms[targetDomId].config || {};
+            let mergedConfig = { ...existingConfig, ...config };
+            if (editAction === 'APPEND') {
+              if (config.markdown && existingConfig.markdown) {
+                mergedConfig.markdown = existingConfig.markdown + '\n\n' + config.markdown;
+              }
+              if (config.code && existingConfig.code) {
+                mergedConfig.code = existingConfig.code + '\n  ' + config.code;
+              }
+              if (config.students && Array.isArray(config.students) && existingConfig.students && Array.isArray(existingConfig.students)) {
+                mergedConfig.students = [...existingConfig.students, ...config.students];
+              }
+            }
+            const target = canvas.getObjects().find((o: any) => o.id === targetDomId);
+            const posX = target ? target.left : doms[targetDomId].x;
+            const posY = target ? target.top : doms[targetDomId].y;
+
+            await execute(posX, posY, 'Mengedit komponen...', () => {
+              storeState.updateDomElement(targetDomId, { config: mergedConfig });
+            });
+          }
+          break;
+        }
+
+        case 'DRAG_OBJECT': {
+          const { objectId, elementText, toX, toY } = action.payload;
+          const target = findTargetObject(objectId, elementText);
+          if (target) {
+            // 1. Go to Object
+            await animateCursorTo(target.left, target.top);
+            setCurrentAction(`Menggeser ${elementText || 'objek'}...`);
+            setClicking(true);
+            await wait(30);
+
+            // 2. Drag to Dest (Snappy 14 steps ~140ms)
+            const startX = target.left;
+            const startY = target.top;
+            const steps = 14;
+            
+            for (let i = 1; i <= steps; i++) {
+              const t = i / steps;
+              const ease = 1 - Math.pow(1 - t, 3);
+              const curX = startX + (toX - startX) * ease;
+              const curY = startY + (toY - startY) * ease;
+              
+              target.set({ left: curX, top: curY });
+              target.setCoords();
+              if (target.isDomPlaceholder) updateDomElement(target.id, { x: curX, y: curY });
+              
+              setCursorPosition({ x: curX, y: curY });
+              canvas.requestRenderAll();
+              await wait(10);
+            }
+            
+            setClicking(false);
+            await wait(30);
+
+            // Synchronize mindmap node position in store if target is a mindmap node
+            const store = useStore.getState();
+            const matchedMindmap = store.activeMindmapNodes.find(
+              n => n.canvasObjectId === target.id || (elementText && n.text.toLowerCase() === elementText.toLowerCase())
+            );
+            if (matchedMindmap) {
+              store.registerMindmapNode({
+                ...matchedMindmap,
+                x: toX,
+                y: toY,
+                canvasObjectId: target.id
+              });
+
+              // Redraw connected mindmap paths so connector lines follow smoothly
+              if (store.activeMindmapNodes.length > 1) {
+                const updatedNodes = useStore.getState().activeMindmapNodes;
+                const existingPaths = canvas.getObjects().filter((o: any) => o.id && (o.id.startsWith('path_') || o.id.startsWith('arrow_')));
+                existingPaths.forEach((p: any) => canvas.remove(p));
+
+                updatedNodes.forEach(node => {
+                  if (node.parentNodeText) {
+                    const parent = updatedNodes.find(p => p.text.toLowerCase() === node.parentNodeText?.toLowerCase());
+                    if (parent) {
+                      const pathStr = `M ${parent.x} ${parent.y} L ${node.x} ${node.y}`;
+                      const path = new window.fabric.Path(pathStr, {
+                        fill: 'transparent',
+                        stroke: '#3B82F6',
+                        strokeWidth: 2.5,
+                        strokeLineCap: 'round',
+                        id: `path_${Date.now()}_${Math.random()}`
+                      });
+                      canvas.add(path);
+                      canvas.sendToBack(path);
+                    }
+                  }
+                });
+                canvas.requestRenderAll();
+              }
+            }
+          }
+          break;
+        }
+
+        case 'RESIZE_OBJECT': {
+          const { objectId, elementText, width, height } = action.payload;
+          const target = findTargetObject(objectId, elementText);
+          if (target) {
+            await execute(target.left, target.top, 'Resizing...', () => {
+              if (target.isDomPlaceholder) {
+                target.set({ width, height, scaleX: 1, scaleY: 1 });
+                updateDomElement(target.id, { width, height });
+              } else {
+                target.set({ 
+                  scaleX: width / (target.width || width), 
+                  scaleY: height / (target.height || height) 
+                });
+              }
+              target.setCoords();
+              canvas.requestRenderAll();
+            });
+          }
+          break;
+        }
+
+        case 'MODIFY_PROPERTY': {
+           const { objectId, elementText, property, value, newText, newStyle, newParentNodeText } = action.payload;
+           const target = findTargetObject(objectId, elementText);
+           const resolvedText = newText || value;
+           if (target) {
+              await execute(target.left, target.top, `Updating...`, () => {
+                  if ((property === 'text' || property === 'mindmap_node') && target.isType('group')) {
+                    target.getObjects().forEach((o: any) => {
+                       if (o.type === 'i-text' || o.type === 'text' || o.type === 'textbox') o.set('text', resolvedText);
+                    });
+                    canvas.requestRenderAll();
+                 } else if (property === 'text' || property === 'mindmap_node') {
+                    target.set('text', resolvedText);
+                    canvas.requestRenderAll();
+                 } else if (property === 'fill') {
+                    if (target.isType('group')) {
+                      const shape = target.getObjects().find((o: any) => 
+                        o.type === 'rect' || o.type === 'circle' || o.type === 'triangle' || o.type === 'path' || o.type === 'polygon'
+                      );
+                      if (shape) shape.set('fill', value);
+                    } else {
+                      target.set('fill', value);
+                    }
+                    canvas.requestRenderAll();
+                 } else if (property === 'stroke' || property === 'strokeColor') {
+                    if (target.isType('group')) {
+                      const shape = target.getObjects().find((o: any) => 
+                        o.type === 'rect' || o.type === 'circle' || o.type === 'triangle' || o.type === 'path' || o.type === 'polygon' || o.type === 'line'
+                      );
+                      if (shape) shape.set('stroke', value);
+                    } else {
+                      target.set('stroke', value);
+                    }
+                    canvas.requestRenderAll();
+                 } else if (property === 'strokeWidth') {
+                    const sw = Number(value) || 2;
+                    if (target.isType('group')) {
+                      const shape = target.getObjects().find((o: any) => 
+                        o.type === 'rect' || o.type === 'circle' || o.type === 'triangle' || o.type === 'path' || o.type === 'polygon' || o.type === 'line'
+                      );
+                      if (shape) shape.set('strokeWidth', sw);
+                    } else {
+                      target.set('strokeWidth', sw);
+                    }
+                    canvas.requestRenderAll();
+                 }
+
+                 // Synchronize mindmap node updates in store
+                 if (property === 'text' || property === 'mindmap_node') {
+                   const store = useStore.getState();
+                   const oldLabel = elementText || '';
+                   const matched = store.activeMindmapNodes.find(
+                     n => n.canvasObjectId === target.id || (oldLabel && n.text.toLowerCase() === oldLabel.toLowerCase())
+                   );
+                   if (matched) {
+                     const prevName = matched.text;
+                     store.registerMindmapNode({
+                       ...matched,
+                       text: resolvedText,
+                       style: newStyle || matched.style,
+                       parentNodeText: newParentNodeText !== undefined ? newParentNodeText : matched.parentNodeText
+                     });
+                     // Update children referencing old parent name
+                     store.activeMindmapNodes.forEach(ch => {
+                       if (ch.parentNodeText?.toLowerCase() === prevName.toLowerCase()) {
+                         store.registerMindmapNode({
+                           ...ch,
+                           parentNodeText: resolvedText
+                         });
+                       }
+                     });
+                   }
+                 }
+              });
+           }
+           break;
+        }
+
+        case 'DELETE_OBJECT': {
+           const { objectId, elementText } = action.payload;
+           const target = findTargetObject(objectId, elementText);
+           if (target) {
+             await execute(target.left, target.top, 'Deleting...', () => {
+               canvas.remove(target);
+               if (target.isDomPlaceholder) removeDomElement(target.id);
+               canvas.requestRenderAll();
+             });
+           }
+           break;
+        }
+
+        case 'RELAYOUT_MINDMAP': {
+          const { layoutType = 'RADIAL', centerX = canvas.width / 2, centerY = canvas.height / 2 } = action.payload;
+          const storeState = useStore.getState();
+          const activeNodes = storeState.activeMindmapNodes;
+          if (activeNodes.length > 0) {
+            await execute(centerX, centerY, 'Reorganizing Mindmap...', async () => {
+              const { layoutMindmap, layoutMindmapTreeHorizontal } = await import('../utils/mindmapLayout');
+              const inputNodes = activeNodes.map(n => ({
+                text: n.text,
+                style: n.style as any,
+                parentNodeText: n.parentNodeText
+              }));
+
+              const laid = layoutType === 'TREE_HORIZONTAL'
+                ? layoutMindmapTreeHorizontal(inputNodes, centerX - 300, centerY)
+                : layoutMindmap(inputNodes, centerX, centerY);
+
+              laid.forEach(node => {
+                const origRecord = activeNodes.find(a => a.text.toLowerCase() === node.text.toLowerCase());
+                const target = findTargetObject(origRecord?.canvasObjectId, node.text);
+                if (target) {
+                  target.set({ left: node.x, top: node.y });
+                  target.setCoords();
+                  storeState.registerMindmapNode({
+                    text: node.text,
+                    style: node.style as any,
+                    parentNodeText: node.parentNodeText,
+                    canvasObjectId: target.id,
+                    x: node.x,
+                    y: node.y
+                  });
+                }
+              });
+
+              // Redraw connections cleanly
+              const existingPaths = canvas.getObjects().filter((o: any) => o.id && (o.id.startsWith('path_') || o.id.startsWith('arrow_')));
+              existingPaths.forEach((p: any) => canvas.remove(p));
+
+              laid.forEach(node => {
+                if (node.parentNodeText) {
+                  const parent = laid.find(p => p.text.toLowerCase() === node.parentNodeText?.toLowerCase());
+                  if (parent) {
+                    const pathStr = `M ${parent.x} ${parent.y} L ${node.x} ${node.y}`;
+                    const path = new window.fabric.Path(pathStr, {
+                      fill: 'transparent',
+                      stroke: '#3B82F6',
+                      strokeWidth: 2.5,
+                      strokeLineCap: 'round',
+                      id: `path_${Date.now()}_${Math.random()}`
+                    });
+                    canvas.add(path);
+                    canvas.sendToBack(path);
+                  }
+                }
+              });
+
+              canvas.requestRenderAll();
+            });
+          }
+          break;
+        }
+
+        case 'REORGANIZE_CANVAS': {
+          await execute(canvas.width / 2, canvas.height / 2, 'Untangling Canvas Elements...', () => {
+            const objs = canvas.getObjects().filter((o: any) => !o.id?.startsWith('path_') && !o.id?.startsWith('arrow_'));
+            for (let pass = 0; pass < 8; pass++) {
+              for (let i = 0; i < objs.length; i++) {
+                for (let j = i + 1; j < objs.length; j++) {
+                  const o1 = objs[i];
+                  const o2 = objs[j];
+                  const w1 = (o1.width || 100) * (o1.scaleX || 1);
+                  const h1 = (o1.height || 60) * (o1.scaleY || 1);
+                  const w2 = (o2.width || 100) * (o2.scaleX || 1);
+                  const h2 = (o2.height || 60) * (o2.scaleY || 1);
+
+                  const minDx = (w1 + w2) / 2 + 35;
+                  const minDy = (h1 + h2) / 2 + 25;
+
+                  const dx = o2.left - o1.left;
+                  const dy = o2.top - o1.top;
+
+                  if (Math.abs(dx) < minDx && Math.abs(dy) < minDy) {
+                    const shiftX = ((minDx - Math.abs(dx)) / 2) * (dx >= 0 ? 1 : -1);
+                    const shiftY = ((minDy - Math.abs(dy)) / 2) * (dy >= 0 ? 1 : -1);
+                    o1.set({ left: o1.left - shiftX, top: o1.top - shiftY });
+                    o2.set({ left: o2.left + shiftX, top: o2.top + shiftY });
+                    o1.setCoords();
+                    o2.setCoords();
+                    if (o1.isDomPlaceholder) updateDomElement(o1.id, { x: o1.left, y: o1.top });
+                    if (o2.isDomPlaceholder) updateDomElement(o2.id, { x: o2.left, y: o2.top });
+                  }
+                }
+              }
+            }
+            canvas.requestRenderAll();
+          });
+          break;
+        }
+      }
+    } catch (err) {
+      console.error("Action failed:", err);
+    }
+
+    processingRef.current = false;
+    setActing(false);
+    setCurrentAction(null);
+
+    // Play success sound when queue is finished
+    if (useStore.getState().actionQueue.length === 0) {
+      sounds.play('success');
+      
+      // Remove tiny circle objects that have no text and no connections (Fix 4)
+      const toRemove: any[] = [];
+      canvas.getObjects().forEach((obj: any) => {
+        if (obj.type === 'circle') {
+          const circle = obj;
+          if (
+            (circle.radius || 0) < 8 &&
+            !circle.id?.startsWith('node_') &&
+            !circle.id?.startsWith('agent_')
+          ) {
+            toRemove.push(obj);
+          }
+        }
+      });
+      toRemove.forEach(obj => canvas.remove(obj));
+      canvas.requestRenderAll();
+    }
+  };
+
+  // Event-driven processing: subscribe to actionQueue changes instead of polling.
+  // This fires immediately when a new action is enqueued, with no blind 100ms delay.
+  useEffect(() => {
+    // Run immediately in case there are already items in the queue
+    runRef.current();
+
+    // Subscribe to queue length changes — trigger on every new addition
+    const unsub = useStore.subscribe(
+      () => {
+        const length = useStore.getState().actionQueue.length;
+        if (!processingRef.current && length > 0) {
+          runRef.current();
+        }
+      }
+    );
+
+    return () => unsub();
+  }, []);
+};

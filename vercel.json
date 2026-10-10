@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "buildCommand": "vite build",
+  "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/download",
+      "destination": "https://github.com/Ardelyo/trido/releases/latest",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/|assets/|vendor/|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
